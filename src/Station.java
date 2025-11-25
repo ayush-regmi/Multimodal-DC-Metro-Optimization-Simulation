@@ -71,10 +71,57 @@ public class Station {
                 }
             }
 
-            double travelTime = busInfo.getTravelTime(5, 6);
+            // Calculate realistic bus travel time based on station area and population
+            // Buses pick up passengers from local bus stops and bring them to the train station
+            // Travel distance is based on station area (estimated from population density)
+            // Average bus route distance: 2-5 km for local bus routes to train stations
+            double averageBusRouteDistance = calculateBusRouteDistance(cityInfo);
+            double travelTime = (averageBusRouteDistance / busInfo.getVehicleSpeed()) * 60; // Convert to minutes
+            
+            // Add bus stop dwell time (10-20 seconds per stop, average 3-5 stops per route)
+            double busDwellTime = (15.0 * 4.0) / 60.0; // 15 seconds * 4 stops = 1 minute
+            travelTime += busDwellTime;
+            
             busTime += travelTime;
         }
         lastPickupTime = currentTime; //This line of code fixed an issue I dealt with 5 hours because I am dumb -C
+    }
+
+    /**
+     * Calculates realistic bus route distance based on station characteristics.
+     * Larger stations (more population) have larger service areas, so longer bus routes.
+     * 
+     * @param cityInfo Array of city information for context
+     * @return Average bus route distance in kilometers
+     */
+    private double calculateBusRouteDistance(CityInfoHolder[] cityInfo) {
+        // Base distance: 2 km for small stations
+        // Scale with population: larger stations have more bus stops and longer routes
+        // Typical local bus route to train station: 2-5 km
+        
+        double baseDistance = 2.0; // km
+        double maxDistance = 5.0; // km
+        
+        // Normalize population to 0-1 scale (using a reasonable max population)
+        // Assuming max population around 700k (DC), scale accordingly
+        double maxPopulation = 700000.0;
+        double populationFactor = Math.min(1.0, (double) population / maxPopulation);
+        
+        // Calculate distance: base + (max - base) * population factor
+        double routeDistance = baseDistance + (maxDistance - baseDistance) * populationFactor;
+        
+        // Add some variation based on station density
+        // Urban stations (DC) have shorter routes, suburban stations have longer routes
+        if (distanceFromOriginStation > 50) {
+            // Suburban station - slightly longer routes
+            routeDistance *= 1.2;
+        } else if (distanceFromOriginStation < 20) {
+            // Urban station - slightly shorter routes
+            routeDistance *= 0.9;
+        }
+        
+        // Ensure within reasonable bounds
+        return Math.max(1.5, Math.min(6.0, routeDistance));
     }
 
     private String pickStation(CityInfoHolder[] cityInfo) {

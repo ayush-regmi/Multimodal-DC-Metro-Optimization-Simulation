@@ -47,6 +47,10 @@ public class BatchServerQueue {
         double timeToTravel = (distanceToTravel / trainInfo.getVehicleSpeed())*60;
         distanceFromOriginStation = stationDistanceFromOrigin;
 
+        // Track passengers for dwell time calculation
+        int passengersBoarding = 0;
+        int passengersAlighting = 0;
+
         int capacityLeft = trainInfo.getVehicleCapacity() - currentPassengers.getLength();
         Queue<Job> tempWaitingQ = new Queue<>();
 
@@ -58,6 +62,7 @@ public class BatchServerQueue {
             if((direction && destinationDistance > stationDistanceFromOrigin) || (!direction && destinationDistance < stationDistanceFromOrigin)) {
                 currentPassengers.enqueue(job);
                 capacityLeft--;
+                passengersBoarding++;
             }
             else {
                 tempWaitingQ.enqueue(job);
@@ -74,6 +79,7 @@ public class BatchServerQueue {
             if(getCurrentStation().getName().equals(j.getDestStation())) {
                 j.complete(currentTime);
                 completedJobs++;
+                passengersAlighting++;
                 double serviceTime = j.getServiceEndTime() - j.getTimeOfCreation();
                 totalServiceTime += serviceTime;
                 longestServiceTime = Math.max(longestServiceTime, serviceTime);
@@ -84,6 +90,18 @@ public class BatchServerQueue {
         for(Job j : passengerList) {
             currentPassengers.enqueue(j);
         }
+
+        // Calculate dwell time based on passenger activity
+        // Base dwell time: 20 seconds
+        // Additional time: 0.5 seconds per boarding passenger, 0.3 seconds per alighting passenger
+        double baseDwellTime = 20.0; // seconds
+        double boardingTime = passengersBoarding * 0.5; // seconds per passenger
+        double alightingTime = passengersAlighting * 0.3; // seconds per passenger
+        double totalDwellTime = baseDwellTime + boardingTime + alightingTime;
+        
+        // Convert dwell time to minutes and add to travel time
+        double dwellTimeInMinutes = totalDwellTime / 60.0;
+        timeToTravel += dwellTimeInMinutes;
 
         currentStation.getBusArrivals(currentTime, stationQueue.getStationNames());
         return timeToTravel;
