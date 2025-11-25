@@ -4,25 +4,31 @@ import java.util.Scanner;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 
 import static java.lang.System.out;
 
 public class Main {
     public static void main(String[] args) {
-        out.print("Please enter your station configuration file directory:");
+        out.print("Please enter your station configuration file directory(if you don't have one, press enter to use the default):");
 
         Scanner ln = new Scanner(System.in);
         String stationConfigFile = ln.nextLine();
         ln.close();
-        if(stationConfigFile.isEmpty()) { stationConfigFile = "/Users/ayushrg/Code/Multimodal-DC-Metro-Optimization-Simulation/stations.csv"; }
+        if(stationConfigFile.isEmpty()) {
+            Path defaultStationsPath = Paths.get("csv", "stations.csv");
+            stationConfigFile = defaultStationsPath.toFile().getAbsolutePath();
+        }
 
-        int numTrainsRange = 16;
-        int numBussesRange = 50;
-        int[][] vehicleNumber = new int[numTrainsRange * numBussesRange][2];
+        int numTrainsRange = 20;
+        int numBusesRange = 500;
+        int[][] vehicleNumber = new int[numTrainsRange * numBusesRange][2];
         int index = 0;
         for(int train = 1; train <= numTrainsRange; train++) {
-            for(int bus = 1; bus <= numBussesRange; bus++) {
+            for(int bus = 1; bus <= numBusesRange; bus++) {
                 vehicleNumber[index][0] = train;
                 vehicleNumber[index][1] = bus;
                 index++;
@@ -41,7 +47,7 @@ public class Main {
                     250,
                     numBuses,
                     50,
-                    15
+                    75
             );
 
                 Simulation simulation = new Simulation(stationConfigFile, simulationConfig);
@@ -52,12 +58,19 @@ public class Main {
         System.out.println("\nSimulation results: ");
         results.forEach(System.out::println);
 
-        String csvPath = "results.csv";
+        String csvPath = "csv/results.csv";
         writeResultsCsv(csvPath, results);
 
     }
 
     private static void writeResultsCsv(String filePath, List<OutputDataConfig> results) {
+        // Ensure the directory exists
+        File file = new File(filePath);
+        File parentDir = file.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            parentDir.mkdirs();
+        }
+        
         // header row
         String header = "Trains,Buses,AvgServiceTime,LongestServiceTime,CompletedJobs";
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {

@@ -117,9 +117,192 @@ for i, (idx, row) in enumerate(pareto_df.head(10).iterrows(), 1):
     print(f"   Service Time: {row['AvgServiceTime']:.2f} min | Jobs: {int(row['CompletedJobs'])} | "
           f"Efficiency: {row['JobsPerVehicle']:.2f} jobs/vehicle")
 
-# 6. RECOMMENDED CONFIGURATION (Balanced approach)
+# 6. MINIMUM OPTIMAL CONFIGURATION (Finding the knee point / diminishing returns)
 print("\n" + "=" * 80)
-print("6. RECOMMENDED CONFIGURATION (Balanced Approach)")
+print("6. MINIMUM OPTIMAL CONFIGURATION (Point of Diminishing Returns)")
+print("=" * 80)
+
+# Find best performance values
+best_service_time = df['AvgServiceTime'].min()
+best_completed_jobs = df['CompletedJobs'].max()
+best_service_time_config = df.loc[df['AvgServiceTime'].idxmin()]
+best_jobs_config = df.loc[df['CompletedJobs'].idxmax()]
+
+print(f"\nBest possible performance:")
+print(f"  Minimum Service Time: {best_service_time:.2f} min (Trains: {int(best_service_time_config['Trains'])}, Buses: {int(best_service_time_config['Buses'])})")
+print(f"  Maximum Completed Jobs: {int(best_completed_jobs)} (Trains: {int(best_jobs_config['Trains'])}, Buses: {int(best_jobs_config['Buses'])})")
+
+# Define acceptable thresholds (within 5% and 10% of best)
+thresholds = [0.05, 0.10, 0.15]  # 5%, 10%, 15% thresholds
+
+for threshold in thresholds:
+    print(f"\n--- Finding minimum config within {threshold*100:.0f}% of best performance ---")
+    
+    # For service time: find minimum vehicles where service time is within threshold
+    acceptable_service_time = best_service_time * (1 + threshold)
+    service_time_candidates = df[df['AvgServiceTime'] <= acceptable_service_time].copy()
+    
+    if len(service_time_candidates) > 0:
+        # Sort by total vehicles and find minimum
+        service_time_candidates = service_time_candidates.sort_values('TotalVehicles')
+        min_service_config = service_time_candidates.iloc[0]
+        
+        print(f"\nMinimum config for service time ≤ {acceptable_service_time:.2f} min ({threshold*100:.0f}% threshold):")
+        print(f"  Trains: {int(min_service_config['Trains'])}, Buses: {int(min_service_config['Buses'])}")
+        print(f"  Total Vehicles: {int(min_service_config['TotalVehicles'])}")
+        print(f"  Service Time: {min_service_config['AvgServiceTime']:.2f} min")
+        print(f"  Completed Jobs: {int(min_service_config['CompletedJobs'])}")
+        print(f"  Savings vs best: {int(best_service_time_config['TotalVehicles'] - min_service_config['TotalVehicles'])} fewer vehicles")
+    
+    # For completed jobs: find minimum vehicles where jobs are within threshold
+    acceptable_jobs = best_completed_jobs * (1 - threshold)
+    jobs_candidates = df[df['CompletedJobs'] >= acceptable_jobs].copy()
+    
+    if len(jobs_candidates) > 0:
+        # Sort by total vehicles and find minimum
+        jobs_candidates = jobs_candidates.sort_values('TotalVehicles')
+        min_jobs_config = jobs_candidates.iloc[0]
+        
+        print(f"\nMinimum config for completed jobs ≥ {int(acceptable_jobs)} ({threshold*100:.0f}% threshold):")
+        print(f"  Trains: {int(min_jobs_config['Trains'])}, Buses: {int(min_jobs_config['Buses'])}")
+        print(f"  Total Vehicles: {int(min_jobs_config['TotalVehicles'])}")
+        print(f"  Service Time: {min_jobs_config['AvgServiceTime']:.2f} min")
+        print(f"  Completed Jobs: {int(min_jobs_config['CompletedJobs'])}")
+        print(f"  Savings vs best: {int(best_jobs_config['TotalVehicles'] - min_jobs_config['TotalVehicles'])} fewer vehicles")
+
+# Marginal improvement analysis - find knee point
+print("\n" + "=" * 80)
+print("7. MARGINAL IMPROVEMENT ANALYSIS (Finding the Knee Point)")
+print("=" * 80)
+
+# Group by total vehicles and calculate average performance
+vehicle_performance = df.groupby('TotalVehicles').agg({
+    'AvgServiceTime': ['mean', 'min'],
+    'CompletedJobs': ['mean', 'max'],
+    'Trains': 'first',
+    'Buses': 'first'
+}).reset_index()
+vehicle_performance.columns = ['TotalVehicles', 'AvgServiceTime_Mean', 'AvgServiceTime_Min', 
+                                'CompletedJobs_Mean', 'CompletedJobs_Max', 'Trains', 'Buses']
+
+# Calculate marginal improvements
+vehicle_performance = vehicle_performance.sort_values('TotalVehicles')
+vehicle_performance['ServiceTime_Improvement'] = vehicle_performance['AvgServiceTime_Min'].diff().abs() * -1  # Negative diff (lower is better)
+vehicle_performance['Jobs_Improvement'] = vehicle_performance['CompletedJobs_Max'].diff()
+vehicle_performance['MarginalServiceTimeGain'] = vehicle_performance['ServiceTime_Improvement'] / vehicle_performance['TotalVehicles'].diff()
+vehicle_performance['MarginalJobsGain'] = vehicle_performance['Jobs_Improvement'] / vehicle_performance['TotalVehicles'].diff()
+
+# Find knee point: where marginal improvement drops significantly
+# Knee point is where adding one more vehicle improves service time by less than X minutes
+# or improves jobs by less than Y jobs
+knee_threshold_service = vehicle_performance['ServiceTime_Improvement'].quantile(0.25)  # Bottom 25% of improvements
+knee_threshold_jobs = vehicle_performance['Jobs_Improvement'].quantile(0.25)  # Bottom 25% of improvements
+
+knee_point_service = vehicle_performance[
+    (vehicle_performance['ServiceTime_Improvement'] < knee_threshold_service) &
+    (vehicle_performance['TotalVehicles'] > vehicle_performance['TotalVehicles'].min())
+].iloc[0] if len(vehicle_performance[
+    (vehicle_performance['ServiceTime_Improvement'] < knee_threshold_service) &
+    (vehicle_performance['TotalVehicles'] > vehicle_performance['TotalVehicles'].min())
+]) > 0 else None
+
+knee_point_jobs = vehicle_performance[
+    (vehicle_performance['Jobs_Improvement'] < knee_threshold_jobs) &
+    (vehicle_performance['TotalVehicles'] > vehicle_performance['TotalVehicles'].min())
+].iloc[0] if len(vehicle_performance[
+    (vehicle_performance['Jobs_Improvement'] < knee_threshold_jobs) &
+    (vehicle_performance['TotalVehicles'] > vehicle_performance['TotalVehicles'].min())
+]) > 0 else None
+
+print("\nKnee Point Analysis (where marginal improvements become small):")
+if knee_point_service is not None:
+    print(f"\nService Time Knee Point:")
+    print(f"  Total Vehicles: {int(knee_point_service['TotalVehicles'])}")
+    print(f"  Avg Service Time: {knee_point_service['AvgServiceTime_Min']:.2f} min")
+    print(f"  Marginal improvement: {knee_point_service['ServiceTime_Improvement']:.4f} min per vehicle")
+    
+    # Find actual config closest to this
+    knee_service_config = df[df['TotalVehicles'] == int(knee_point_service['TotalVehicles'])].sort_values('AvgServiceTime').iloc[0]
+    print(f"  Recommended: {int(knee_service_config['Trains'])} trains, {int(knee_service_config['Buses'])} buses")
+
+if knee_point_jobs is not None:
+    print(f"\nCompleted Jobs Knee Point:")
+    print(f"  Total Vehicles: {int(knee_point_jobs['TotalVehicles'])}")
+    print(f"  Max Completed Jobs: {int(knee_point_jobs['CompletedJobs_Max'])}")
+    print(f"  Marginal improvement: {knee_point_jobs['Jobs_Improvement']:.2f} jobs per vehicle")
+    
+    # Find actual config closest to this
+    knee_jobs_config = df[df['TotalVehicles'] == int(knee_point_jobs['TotalVehicles'])].sort_values('CompletedJobs', ascending=False).iloc[0]
+    print(f"  Recommended: {int(knee_jobs_config['Trains'])} trains, {int(knee_jobs_config['Buses'])} buses")
+
+# Find balanced knee point (considering both metrics)
+print("\n" + "=" * 80)
+print("8. BALANCED MINIMUM OPTIMAL (Recommended)")
+print("=" * 80)
+
+# Initialize variables for visualization
+min_balanced = None
+balanced_candidates = pd.DataFrame()
+
+# Find configurations that are within 10% of best on BOTH metrics
+balanced_threshold = 0.10
+acceptable_service = best_service_time * (1 + balanced_threshold)
+acceptable_jobs = best_completed_jobs * (1 - balanced_threshold)
+
+balanced_candidates = df[
+    (df['AvgServiceTime'] <= acceptable_service) &
+    (df['CompletedJobs'] >= acceptable_jobs)
+].copy()
+
+if len(balanced_candidates) > 0:
+    # Sort by total vehicles to find minimum
+    balanced_candidates = balanced_candidates.sort_values('TotalVehicles')
+    min_balanced = balanced_candidates.iloc[0]
+    
+    print(f"\nMinimum balanced configuration (within 10% of best on both metrics):")
+    print(f"  Trains: {int(min_balanced['Trains'])}, Buses: {int(min_balanced['Buses'])}")
+    print(f"  Total Vehicles: {int(min_balanced['TotalVehicles'])}")
+    print(f"  Service Time: {min_balanced['AvgServiceTime']:.2f} min (best: {best_service_time:.2f}, {((min_balanced['AvgServiceTime']/best_service_time - 1)*100):.1f}% worse)")
+    print(f"  Completed Jobs: {int(min_balanced['CompletedJobs'])} (best: {int(best_completed_jobs)}, {((1 - min_balanced['CompletedJobs']/best_completed_jobs)*100):.1f}% less)")
+    print(f"  Efficiency: {min_balanced['JobsPerVehicle']:.2f} jobs/vehicle")
+    
+    # Compare to maximum configs
+    print(f"\n  Savings vs maximum service time config:")
+    print(f"    Vehicles: {int(best_service_time_config['TotalVehicles'] - min_balanced['TotalVehicles'])} fewer")
+    print(f"    Service time difference: {min_balanced['AvgServiceTime'] - best_service_time:.2f} min")
+    
+    print(f"\n  Savings vs maximum jobs config:")
+    print(f"    Vehicles: {int(best_jobs_config['TotalVehicles'] - min_balanced['TotalVehicles'])} fewer")
+    print(f"    Jobs difference: {int(best_completed_jobs - min_balanced['CompletedJobs'])} fewer")
+else:
+    print("\nNo configuration found within 10% threshold for both metrics.")
+    print("Trying with 15% threshold...")
+    balanced_threshold = 0.15
+    acceptable_service = best_service_time * (1 + balanced_threshold)
+    acceptable_jobs = best_completed_jobs * (1 - balanced_threshold)
+    
+    balanced_candidates = df[
+        (df['AvgServiceTime'] <= acceptable_service) &
+        (df['CompletedJobs'] >= acceptable_jobs)
+    ].copy()
+    
+    if len(balanced_candidates) > 0:
+        balanced_candidates = balanced_candidates.sort_values('TotalVehicles')
+        min_balanced = balanced_candidates.iloc[0]
+        
+        print(f"\nMinimum balanced configuration (within 15% of best on both metrics):")
+        print(f"  Trains: {int(min_balanced['Trains'])}, Buses: {int(min_balanced['Buses'])}")
+        print(f"  Total Vehicles: {int(min_balanced['TotalVehicles'])}")
+        print(f"  Service Time: {min_balanced['AvgServiceTime']:.2f} min")
+        print(f"  Completed Jobs: {int(min_balanced['CompletedJobs'])}")
+    else:
+        # Fallback: use the best balanced config we can find
+        min_balanced = None
+        balanced_candidates = pd.DataFrame()
+
+# 9. RECOMMENDED CONFIGURATION (Balanced approach)
+print("\n" + "=" * 80)
+print("9. RECOMMENDED CONFIGURATION (Balanced Approach)")
 print("=" * 80)
 
 # Create a composite score: normalize and combine service time and throughput
@@ -141,9 +324,9 @@ print(f"  Completed Jobs: {int(optimal_composite['CompletedJobs'])}")
 print(f"  Total Vehicles: {int(optimal_composite['TotalVehicles'])}")
 print(f"  Efficiency: {optimal_composite['JobsPerVehicle']:.2f} jobs/vehicle")
 
-# 7. SENSITIVITY ANALYSIS
+# 10. SENSITIVITY ANALYSIS
 print("\n" + "=" * 80)
-print("7. SENSITIVITY ANALYSIS")
+print("10. SENSITIVITY ANALYSIS")
 print("=" * 80)
 
 # Analyze how performance changes with number of trains
@@ -172,9 +355,9 @@ if len(bus_analysis) > 10:
     for _, row in bus_analysis.tail(5).iterrows():
         print(f"{int(row['Buses']):<8} {row['AvgServiceTime']:<15.2f} {int(row['CompletedJobs']):<18} {row['JobsPerVehicle']:<15.2f}")
 
-# 8. VISUALIZATION
+# 11. VISUALIZATION
 print("\n" + "=" * 80)
-print("8. GENERATING OPTIMIZATION VISUALIZATIONS")
+print("11. GENERATING OPTIMIZATION VISUALIZATIONS")
 print("=" * 80)
 
 # Create a comprehensive visualization
@@ -261,54 +444,148 @@ plt.tight_layout()
 plt.savefig('optimization_analysis.png', dpi=300, bbox_inches='tight')
 print("\nVisualization saved as 'optimization_analysis.png'")
 
-# 9. SUMMARY TABLE
+# Add visualization for marginal improvements
+# Create additional figure for knee point analysis
+fig2 = plt.figure(figsize=(16, 10))
+
+# 1. Service Time vs Total Vehicles with knee point
+ax1 = plt.subplot(2, 3, 1)
+vehicle_perf_sorted = vehicle_performance.sort_values('TotalVehicles')
+plt.plot(vehicle_perf_sorted['TotalVehicles'], vehicle_perf_sorted['AvgServiceTime_Min'], 
+         'o-', linewidth=2, markersize=6, label='Minimum Service Time')
+if knee_point_service is not None:
+    plt.axvline(knee_point_service['TotalVehicles'], color='r', linestyle='--', 
+                linewidth=2, label=f"Knee Point: {int(knee_point_service['TotalVehicles'])} vehicles")
+plt.xlabel('Total Vehicles', fontweight='bold')
+plt.ylabel('Minimum Service Time (minutes)', fontweight='bold')
+plt.title('Service Time vs Fleet Size (Knee Point Analysis)', fontsize=12, fontweight='bold')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+# 2. Completed Jobs vs Total Vehicles with knee point
+ax2 = plt.subplot(2, 3, 2)
+plt.plot(vehicle_perf_sorted['TotalVehicles'], vehicle_perf_sorted['CompletedJobs_Max'], 
+         's-', linewidth=2, markersize=6, label='Maximum Completed Jobs', color='green')
+if knee_point_jobs is not None:
+    plt.axvline(knee_point_jobs['TotalVehicles'], color='r', linestyle='--', 
+                linewidth=2, label=f"Knee Point: {int(knee_point_jobs['TotalVehicles'])} vehicles")
+plt.xlabel('Total Vehicles', fontweight='bold')
+plt.ylabel('Maximum Completed Jobs', fontweight='bold')
+plt.title('Throughput vs Fleet Size (Knee Point Analysis)', fontsize=12, fontweight='bold')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+# 3. Marginal Improvement in Service Time
+ax3 = plt.subplot(2, 3, 3)
+plt.plot(vehicle_perf_sorted['TotalVehicles'][1:], vehicle_perf_sorted['ServiceTime_Improvement'][1:], 
+         'o-', linewidth=2, markersize=6, color='orange')
+if knee_point_service is not None:
+    plt.axvline(knee_point_service['TotalVehicles'], color='r', linestyle='--', linewidth=2)
+plt.axhline(knee_threshold_service, color='gray', linestyle=':', linewidth=1, label='Threshold')
+plt.xlabel('Total Vehicles', fontweight='bold')
+plt.ylabel('Service Time Improvement (min)', fontweight='bold')
+plt.title('Marginal Service Time Improvement', fontsize=12, fontweight='bold')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+# 4. Marginal Improvement in Jobs
+ax4 = plt.subplot(2, 3, 4)
+plt.plot(vehicle_perf_sorted['TotalVehicles'][1:], vehicle_perf_sorted['Jobs_Improvement'][1:], 
+         's-', linewidth=2, markersize=6, color='purple')
+if knee_point_jobs is not None:
+    plt.axvline(knee_point_jobs['TotalVehicles'], color='r', linestyle='--', linewidth=2)
+plt.axhline(knee_threshold_jobs, color='gray', linestyle=':', linewidth=1, label='Threshold')
+plt.xlabel('Total Vehicles', fontweight='bold')
+plt.ylabel('Jobs Improvement', fontweight='bold')
+plt.title('Marginal Jobs Improvement', fontsize=12, fontweight='bold')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+# 5. Acceptable performance regions
+ax5 = plt.subplot(2, 3, 5)
+plt.scatter(df['TotalVehicles'], df['AvgServiceTime'], 
+            c=df['CompletedJobs'], cmap='viridis', alpha=0.4, s=30, label='All Configurations')
+# Highlight acceptable region (within 10% of best)
+acceptable_service_10 = best_service_time * 1.10
+acceptable_jobs_10 = best_completed_jobs * 0.90
+acceptable_region = df[
+    (df['AvgServiceTime'] <= acceptable_service_10) &
+    (df['CompletedJobs'] >= acceptable_jobs_10)
+]
+if len(acceptable_region) > 0:
+    plt.scatter(acceptable_region['TotalVehicles'], acceptable_region['AvgServiceTime'],
+                c='red', s=100, marker='*', edgecolors='black', linewidths=1,
+                label='Within 10% of Best', zorder=5)
+    if min_balanced is not None and len(balanced_candidates) > 0:
+        plt.scatter(min_balanced['TotalVehicles'], min_balanced['AvgServiceTime'],
+                    c='yellow', s=300, marker='D', edgecolors='black', linewidths=2,
+                    label='Minimum Optimal', zorder=6)
+plt.axhline(acceptable_service_10, color='r', linestyle='--', alpha=0.5, label='10% Threshold')
+plt.xlabel('Total Vehicles', fontweight='bold')
+plt.ylabel('Average Service Time (minutes)', fontweight='bold')
+plt.title('Acceptable Performance Region', fontsize=12, fontweight='bold')
+plt.colorbar(label='Completed Jobs')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+# 6. Efficiency vs Total Vehicles with knee point
+ax6 = plt.subplot(2, 3, 6)
+vehicle_perf_sorted['Efficiency'] = vehicle_perf_sorted['CompletedJobs_Max'] / vehicle_perf_sorted['TotalVehicles']
+plt.plot(vehicle_perf_sorted['TotalVehicles'], vehicle_perf_sorted['Efficiency'], 
+         '^-', linewidth=2, markersize=6, color='teal', label='Efficiency')
+if knee_point_jobs is not None:
+    plt.axvline(knee_point_jobs['TotalVehicles'], color='r', linestyle='--', 
+                linewidth=2, label=f"Knee Point")
+plt.xlabel('Total Vehicles', fontweight='bold')
+plt.ylabel('Efficiency (Jobs per Vehicle)', fontweight='bold')
+plt.title('Efficiency vs Fleet Size', fontsize=12, fontweight='bold')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+plt.tight_layout()
+plt.savefig('knee_point_analysis.png', dpi=300, bbox_inches='tight')
+print("\nKnee point analysis visualization saved as 'knee_point_analysis.png'")
+
+# 12. SUMMARY TABLE
 print("\n" + "=" * 80)
-print("9. SUMMARY: ALL OPTIMAL CONFIGURATIONS")
+print("12. SUMMARY: ALL OPTIMAL CONFIGURATIONS")
 print("=" * 80)
 
+# Build summary data
+summary_criteria = ['Minimize Service Time', 'Maximize Throughput', 'Maximize Efficiency', 
+                    'Minimize Service Time/Vehicle', 'Balanced (Recommended)']
+summary_trains = [int(optimal_min_time['Trains']), int(optimal_max_jobs['Trains']),
+                  int(optimal_efficiency['Trains']), int(optimal_st_per_vehicle['Trains']),
+                  int(optimal_composite['Trains'])]
+summary_buses = [int(optimal_min_time['Buses']), int(optimal_max_jobs['Buses']),
+                 int(optimal_efficiency['Buses']), int(optimal_st_per_vehicle['Buses']),
+                 int(optimal_composite['Buses'])]
+summary_service = [optimal_min_time['AvgServiceTime'], optimal_max_jobs['AvgServiceTime'],
+                   optimal_efficiency['AvgServiceTime'], optimal_st_per_vehicle['AvgServiceTime'],
+                   optimal_composite['AvgServiceTime']]
+summary_jobs = [int(optimal_min_time['CompletedJobs']), int(optimal_max_jobs['CompletedJobs']),
+                int(optimal_efficiency['CompletedJobs']), int(optimal_st_per_vehicle['CompletedJobs']),
+                int(optimal_composite['CompletedJobs'])]
+summary_eff = [optimal_min_time['JobsPerVehicle'], optimal_max_jobs['JobsPerVehicle'],
+               optimal_efficiency['JobsPerVehicle'], optimal_st_per_vehicle['JobsPerVehicle'],
+               optimal_composite['JobsPerVehicle']]
+
+# Add minimum optimal if found
+if min_balanced is not None:
+    summary_criteria.append('Minimum Optimal (10% threshold)')
+    summary_trains.append(int(min_balanced['Trains']))
+    summary_buses.append(int(min_balanced['Buses']))
+    summary_service.append(min_balanced['AvgServiceTime'])
+    summary_jobs.append(int(min_balanced['CompletedJobs']))
+    summary_eff.append(min_balanced['JobsPerVehicle'])
+
 summary_data = {
-    'Criterion': [
-        'Minimize Service Time',
-        'Maximize Throughput',
-        'Maximize Efficiency',
-        'Minimize Service Time/Vehicle',
-        'Balanced (Recommended)'
-    ],
-    'Trains': [
-        int(optimal_min_time['Trains']),
-        int(optimal_max_jobs['Trains']),
-        int(optimal_efficiency['Trains']),
-        int(optimal_st_per_vehicle['Trains']),
-        int(optimal_composite['Trains'])
-    ],
-    'Buses': [
-        int(optimal_min_time['Buses']),
-        int(optimal_max_jobs['Buses']),
-        int(optimal_efficiency['Buses']),
-        int(optimal_st_per_vehicle['Buses']),
-        int(optimal_composite['Buses'])
-    ],
-    'Service Time (min)': [
-        optimal_min_time['AvgServiceTime'],
-        optimal_max_jobs['AvgServiceTime'],
-        optimal_efficiency['AvgServiceTime'],
-        optimal_st_per_vehicle['AvgServiceTime'],
-        optimal_composite['AvgServiceTime']
-    ],
-    'Completed Jobs': [
-        int(optimal_min_time['CompletedJobs']),
-        int(optimal_max_jobs['CompletedJobs']),
-        int(optimal_efficiency['CompletedJobs']),
-        int(optimal_st_per_vehicle['CompletedJobs']),
-        int(optimal_composite['CompletedJobs'])
-    ],
-    'Efficiency': [
-        optimal_min_time['JobsPerVehicle'],
-        optimal_max_jobs['JobsPerVehicle'],
-        optimal_efficiency['JobsPerVehicle'],
-        optimal_st_per_vehicle['JobsPerVehicle'],
-        optimal_composite['JobsPerVehicle']
-    ]
+    'Criterion': summary_criteria,
+    'Trains': summary_trains,
+    'Buses': summary_buses,
+    'Service Time (min)': summary_service,
+    'Completed Jobs': summary_jobs,
+    'Efficiency': summary_eff
 }
 
 summary_df = pd.DataFrame(summary_data)
@@ -327,5 +604,11 @@ print(f"2. Maximum throughput: {int(optimal_max_jobs['CompletedJobs'])} jobs wit
 print(f"3. Best efficiency: {optimal_efficiency['JobsPerVehicle']:.2f} jobs/vehicle with {int(optimal_efficiency['Trains'])} trains, {int(optimal_efficiency['Buses'])} buses")
 print(f"4. Recommended configuration: {int(optimal_composite['Trains'])} trains, {int(optimal_composite['Buses'])} buses")
 print(f"   (Balances service time and throughput)")
+if min_balanced is not None:
+    print(f"\n5. ⭐ MINIMUM OPTIMAL CONFIGURATION: {int(min_balanced['Trains'])} trains, {int(min_balanced['Buses'])} buses")
+    print(f"   - Service Time: {min_balanced['AvgServiceTime']:.2f} min (within 10% of best)")
+    print(f"   - Completed Jobs: {int(min_balanced['CompletedJobs'])} (within 10% of best)")
+    print(f"   - Total Vehicles: {int(min_balanced['TotalVehicles'])} (saves {int(best_service_time_config['TotalVehicles'] + best_jobs_config['TotalVehicles'] - 2*min_balanced['TotalVehicles'])} vehicles vs max configs)")
+    print(f"   - This is the MINIMUM number of vehicles needed for near-optimal performance!")
 print("\n" + "=" * 80)
 
