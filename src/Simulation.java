@@ -60,7 +60,7 @@ public class Simulation {
         int totalCompletedJobs = trains.stream().mapToInt(BatchServerQueue::getCompletedJobs).sum();
         double cumulativeServiceTime = trains.stream().mapToDouble(BatchServerQueue::getTotalServiceTime).sum();
         double avgServiceTime = totalCompletedJobs > 0 ? cumulativeServiceTime / totalCompletedJobs : 0.0;
-        double longestServiceTime = 0;
+        double longestServiceTime = trains.stream().mapToDouble(BatchServerQueue::getLongestServiceTime).max().orElse(0.0);
 
         return new OutputDataConfig(
                 simConfig.numTrains,

@@ -14,7 +14,8 @@ public class Main {
 
         Scanner ln = new Scanner(System.in);
         String stationConfigFile = ln.nextLine();
-        if(stationConfigFile.isEmpty()) { stationConfigFile = "C:\\JavaProjects\\CapstoneTrafficProject\\stations.csv"; } //Caleb: So that I don't have to paste it in each time for myself
+        ln.close();
+        if(stationConfigFile.isEmpty()) { stationConfigFile = "/Users/ayushrg/Code/Multimodal-DC-Metro-Optimization-Simulation/stations.csv"; }
 
         int numTrainsRange = 16;
         int numBussesRange = 50;
