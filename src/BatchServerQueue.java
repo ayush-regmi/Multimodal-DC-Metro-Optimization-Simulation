@@ -11,6 +11,7 @@ public class BatchServerQueue {
     private double timeOffset = 0.0;
     private int completedJobs = 0;
     private double totalServiceTime = 0.0;
+    private double longestServiceTime = 0.0;
 
     public int passengerCount() { return currentPassengers.getLength(); }
     public double getTimeOffset() { return timeOffset; }
@@ -18,6 +19,7 @@ public class BatchServerQueue {
 
     public int getCompletedJobs() { return completedJobs; }
     public double getTotalServiceTime() { return totalServiceTime; }
+    public double getLongestServiceTime() { return longestServiceTime; }
     public Station getCurrentStation() { return currentStation; }
 
     public BatchServerQueue(VehicleInfo vehicleInfo, LoopingQueue<Station> stationQueue) {
@@ -72,7 +74,9 @@ public class BatchServerQueue {
             if(getCurrentStation().getName().equals(j.getDestStation())) {
                 j.complete(currentTime);
                 completedJobs++;
-                totalServiceTime += (j.getServiceEndTime() - j.getTimeOfCreation());
+                double serviceTime = j.getServiceEndTime() - j.getTimeOfCreation();
+                totalServiceTime += serviceTime;
+                longestServiceTime = Math.max(longestServiceTime, serviceTime);
             } else {
                 passengerList.add(j);
             }

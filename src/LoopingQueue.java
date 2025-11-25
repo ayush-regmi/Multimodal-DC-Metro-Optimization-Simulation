@@ -29,6 +29,9 @@ public class LoopingQueue<T> extends Queue<T> {
 
     public LoopingQueue<T> cloneQueue() {
         LoopingQueue<T> cloned = new LoopingQueue<>();
+
+        if (current == null) return cloned;
+
         DoublyQueueRecord start = current;
 
         while (start.prevrecord != null) {

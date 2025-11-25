@@ -1,0 +1,6 @@
+Criterion,Trains,Buses,Service Time (min),Completed Jobs,Efficiency
+Minimize Service Time,16,49,40.31,16256,250.09230769230768
+Maximize Throughput,16,42,40.99,16581,285.87931034482756
+Maximize Efficiency,8,2,58.53,9960,996.0
+Minimize Service Time/Vehicle,16,49,40.31,16256,250.09230769230768
+Balanced (Recommended),16,42,40.99,16581,285.87931034482756
