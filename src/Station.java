@@ -10,7 +10,6 @@ public class Station {
 
     private final double lambda;
     private Queue<Job> busStopWaiters = new Queue<>();
-    private ExponentialDistribution arrivalDistribution;
     private Random r;
 
     public String getName() { return name; }
@@ -32,18 +31,78 @@ public class Station {
         this.numWorkers = numWorkers;
 
         lastPickupTime = 0;
-        lambda = getPopulation()/((double)11985); //TODO: Retrieve median population instead of hardcoded value, maybe add multiplier
-        arrivalDistribution = new ExponentialDistribution(lambda);
+        // Base lambda calculation - arrivals per minute
+        // Based on numWorkers (commuters), not total population
+        // Assumptions:
+        // - 70% of workers commute per day
+        // - Commuters spread over 24 hours with time-of-day multipliers
+        // - Average multiplier over 24h: ~1.22 (peak 2.5x, off-peak 1.0x, late night 0.3x)
+        // - Formula: base_lambda = (numWorkers * commute_rate) / (24_hours * 60_min * avg_multiplier)
+        // - Simplified: base_lambda ≈ numWorkers * 0.0004
+        double commuteRate = 0.70; // 70% of workers commute
+        double avgTimeOfDayMultiplier = 1.22; // Weighted average of multipliers over 24h
+        double totalMinutesPerDay = 24.0 * 60.0; // 1440 minutes
+        lambda = (getNumWorkers() * commuteRate) / (totalMinutesPerDay * avgTimeOfDayMultiplier);
+    }
+    
+    /**
+     * Calculates the demand multiplier based on time of day.
+     * Peak hours (7-9 AM and 4-6 PM) have higher demand.
+     * 
+     * @param currentTime Time in minutes from simulation start
+     * @return Multiplier for arrival rate (1.0 = base, >1.0 = peak hours)
+     */
+    private double getTimeOfDayMultiplier(double currentTime) {
+        // Convert minutes to hours of day (0-24)
+        double hoursOfDay = (currentTime % 1440.0) / 60.0; // 1440 minutes = 24 hours
+        
+        // Morning peak: 7:00 AM - 9:00 AM (420-540 minutes)
+        // Evening peak: 4:00 PM - 6:00 PM (960-1080 minutes)
+        boolean isMorningPeak = (hoursOfDay >= 7.0 && hoursOfDay < 9.0);
+        boolean isEveningPeak = (hoursOfDay >= 16.0 && hoursOfDay < 18.0);
+        
+        if (isMorningPeak || isEveningPeak) {
+            // Peak hours: 2.5x base demand
+            return 2.5;
+        } else if (hoursOfDay >= 6.0 && hoursOfDay < 7.0) {
+            // Pre-morning peak: 1.5x base demand
+            return 1.5;
+        } else if (hoursOfDay >= 9.0 && hoursOfDay < 10.0) {
+            // Post-morning peak: 1.5x base demand
+            return 1.5;
+        } else if (hoursOfDay >= 15.0 && hoursOfDay < 16.0) {
+            // Pre-evening peak: 1.5x base demand
+            return 1.5;
+        } else if (hoursOfDay >= 18.0 && hoursOfDay < 19.0) {
+            // Post-evening peak: 1.5x base demand
+            return 1.5;
+        } else if (hoursOfDay >= 22.0 || hoursOfDay < 5.0) {
+            // Late night/early morning: 0.3x base demand
+            return 0.3;
+        } else {
+            // Off-peak hours: 1.0x base demand
+            return 1.0;
+        }
     }
 
     public void generateBusStopWaiters(double startTime, double endTime, CityInfoHolder[] cityInfo) {
         double localCurrentTime = startTime;
 
         while (localCurrentTime < endTime) {
+            // Get time-of-day multiplier for current time
+            double timeMultiplier = getTimeOfDayMultiplier(localCurrentTime);
+            
+            // Adjust arrival rate based on time of day
+            // Higher multiplier = more frequent arrivals (shorter inter-arrival time)
+            double adjustedLambda = lambda * timeMultiplier;
+            
+            // Create temporary distribution with adjusted lambda
+            ExponentialDistribution adjustedDistribution = new ExponentialDistribution(adjustedLambda);
+            double nextArrival = adjustedDistribution.sample();
+            
             Job job = new Job(localCurrentTime, getName(), pickStation(cityInfo));
             busStopWaiters.enqueue(job);
 
-            double nextArrival = arrivalDistribution.sample();
             localCurrentTime += nextArrival;
             if (localCurrentTime >= endTime) break;
         }

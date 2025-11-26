@@ -13,11 +13,18 @@ import static java.lang.System.out;
 
 public class Main {
     public static void main(String[] args) {
-        out.print("Please enter your station configuration file directory(if you don't have one, press enter to use the default):");
+        //out.print("Please enter your station configuration file directory(if you don't have one, press enter to use the default):");
 
-        Scanner ln = new Scanner(System.in);
-        String stationConfigFile = ln.nextLine();
-        ln.close();
+        //Scanner ln = new Scanner(System.in);
+        //String stationConfigFile = ln.nextLine();
+        //ln.close();
+        //if(stationConfigFile.isEmpty()) {
+        //    Path defaultStationsPath = Paths.get("csv", "stations.csv");
+        // stationConfigFile = defaultStationsPath.toFile().getAbsolutePath();
+       // }
+
+       // for cloud run
+       String stationConfigFile = args.length > 0 ? args[0] : "";
         if(stationConfigFile.isEmpty()) {
             Path defaultStationsPath = Paths.get("csv", "stations.csv");
             stationConfigFile = defaultStationsPath.toFile().getAbsolutePath();
@@ -25,10 +32,30 @@ public class Main {
 
         int numTrainsRange = 20;
         int numBusesRange = 500;
-        int[][] vehicleNumber = new int[numTrainsRange * numBusesRange][2];
+        
+        // Use step sizes to reduce search space
+        int trainStep = 2;   // Test every 2nd train (1, 3, 5, 7, 9, ...)
+        int busStep = 25;    // Test every 25th bus (1, 26, 51, 76, ...)
+        
+        // Calculate number of configurations
+        int numTrainValues = (numTrainsRange + trainStep - 1) / trainStep;  // Ceiling division
+        int numBusValues = (numBusesRange + busStep - 1) / busStep;  // Ceiling division
+        int totalConfigurations = numTrainValues * numBusValues;
+        
+        String separator = "============================================================";
+        System.out.println("\n" + separator);
+        System.out.println("SIMULATION CONFIGURATION");
+        System.out.println(separator);
+        System.out.println("Train range: 1-" + numTrainsRange + " (step: " + trainStep + ")");
+        System.out.println("Bus range: 1-" + numBusesRange + " (step: " + busStep + ")");
+        System.out.println("Total configurations: " + totalConfigurations);
+        System.out.println("Simulation duration: 24 hours (1440 minutes)");
+        System.out.println(separator + "\n");
+        
+        int[][] vehicleNumber = new int[totalConfigurations][2];
         int index = 0;
-        for(int train = 1; train <= numTrainsRange; train++) {
-            for(int bus = 1; bus <= numBusesRange; bus++) {
+        for(int train = 1; train <= numTrainsRange; train += trainStep) {
+            for(int bus = 1; bus <= numBusesRange; bus += busStep) {
                 vehicleNumber[index][0] = train;
                 vehicleNumber[index][1] = bus;
                 index++;
@@ -36,10 +63,16 @@ public class Main {
         }
 
         List<OutputDataConfig> results = new ArrayList<>();
-
+        double simulationDuration = 1440.0; // 24 hours in minutes
+        
+        int configNumber = 0;
         for (int[] num : vehicleNumber) {
+            configNumber++;
             int numTrains = num[0];
             int numBuses  = num[1];
+            
+            System.out.println("\n[" + configNumber + "/" + totalConfigurations + "] Testing: " + 
+                             numTrains + " trains, " + numBuses + " buses");
 
             SimulationConfig simulationConfig = new SimulationConfig(
                     numTrains,
@@ -50,9 +83,9 @@ public class Main {
                     75
             );
 
-                Simulation simulation = new Simulation(stationConfigFile, simulationConfig);
-                results.add(simulation.run(100));
-                System.out.println();
+            Simulation simulation = new Simulation(stationConfigFile, simulationConfig);
+            results.add(simulation.run(simulationDuration));
+            System.out.println();
         }
 
         System.out.println("\nSimulation results: ");

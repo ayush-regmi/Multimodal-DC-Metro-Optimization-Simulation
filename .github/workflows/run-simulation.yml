@@ -1,0 +1,88 @@
+name: Run Simulation
+
+on:
+  workflow_dispatch:  # Allows manual triggering from GitHub Actions tab
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'csv/stations.csv'
+      - '.github/workflows/run-simulation.yml'
+
+jobs:
+  run-simulation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max (GitHub Actions limit)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Compile Java source files
+      run: |
+        mkdir -p out/production/CapstoneTrafficProject
+        javac -d out/production/CapstoneTrafficProject src/*.java
+        echo "Compilation successful"
+        
+    - name: Run simulation
+      run: |
+        echo "Starting simulation..."
+        echo "This will test 200 configurations (10 trains × 20 buses)"
+        echo "Each configuration simulates 24 hours of operation"
+        echo "Estimated runtime: 1.5-3 hours"
+        java -cp out/production/CapstoneTrafficProject Main
+        
+    - name: Display results summary
+      run: |
+        if [ -f csv/results.csv ]; then
+          echo "=== Simulation Results Summary ==="
+          echo "Total configurations tested: $(tail -n +2 csv/results.csv | wc -l)"
+          echo "First few results:"
+          head -n 5 csv/results.csv
+          echo "..."
+          echo "Last few results:"
+          tail -n 5 csv/results.csv
+        else
+          echo "ERROR: results.csv not found!"
+          exit 1
+        fi
+        
+    - name: Set up Python (for optimization analysis)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install Python dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Run optimization analysis
+      continue-on-error: true  # Don't fail if analysis has issues
+      run: |
+        if [ -f optimized.py ] && [ -f csv/results.csv ]; then
+          echo "Running optimization analysis..."
+          python optimized.py
+        else
+          echo "Skipping optimization analysis (optimized.py or results.csv not found)"
+        fi
+        
+    - name: Upload simulation results
+      uses: actions/upload-artifact@v4
+      with:
+        name: simulation-results
+        path: |
+          csv/results.csv
+          optimal_configuration.csv
+          optimization_analysis.png
+          cost_benefit_analysis.png
+        retention-days: 30
+        if-no-files-found: warn
+

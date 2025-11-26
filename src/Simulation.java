@@ -116,7 +116,13 @@ public class Simulation {
         return busesPerStation;
     }
 
-    public OutputDataConfig run(int stops) {
+    /**
+     * Runs the simulation for a specified duration in minutes.
+     * 
+     * @param simulationDurationMinutes Duration of simulation in minutes (e.g., 1440 for 24 hours)
+     * @return OutputDataConfig containing simulation results
+     */
+    public OutputDataConfig run(double simulationDurationMinutes) {
         List<BatchServerQueue> trains = new ArrayList<>();
         for(int i = 0; i < simConfig.numTrains; i++) {
             LoopingQueue<Station> newQueue = globalStationQueue.cloneQueue();
@@ -129,8 +135,18 @@ public class Simulation {
         double[] lastDepartureTime = new double[trains.size()];
         double minHeadway = 3.0; // 3 minutes minimum headway (in minutes, consistent with timeToTravel units)
         
-        for (int i = 0; i <= stops; i++) {
-            System.out.print("\r" + i + "/" + stops + " tasks completed. " + System.currentTimeMillis());
+        double endTime = simulationDurationMinutes;
+        int iterationCount = 0;
+        
+        // Time-based simulation: run until we reach the end time
+        while (currentTime < endTime) {
+            iterationCount++;
+            if (iterationCount % 100 == 0) {
+                double progress = (currentTime / endTime) * 100;
+                System.out.print("\r" + String.format("Simulation progress: %.1f%% (Time: %.1f/%.1f min)", 
+                    progress, currentTime, endTime) + " " + System.currentTimeMillis());
+            }
+            
             double maxTravelTime = 0.0;
             Map<BatchServerQueue, Double> travelTimes = new HashMap<>();
 
@@ -149,6 +165,7 @@ public class Simulation {
                     trainCurrentTime = currentTime + t.getTimeOffset();
                 }
                 
+                // Check if this train would exceed simulation time
                 double travelTime = t.stopAtStation(trainCurrentTime);
                 travelTimes.put(t, travelTime);
                 maxTravelTime = Math.max(travelTime, maxTravelTime);
@@ -156,6 +173,13 @@ public class Simulation {
                 // Update last departure time
                 lastDepartureTime[trainIdx] = trainCurrentTime;
             }
+            
+            // Check if next iteration would exceed simulation time
+            if (currentTime + maxTravelTime > endTime) {
+                // Stop before exceeding time limit
+                break;
+            }
+            
             currentTime += maxTravelTime;
 
             // Second pass: update offsets
@@ -164,6 +188,9 @@ public class Simulation {
                 t.setTimeOffset(t.getTimeOffset() + travelTime - maxTravelTime);
             }
         }
+        
+        System.out.print("\r" + String.format("Simulation complete: %.1f minutes simulated (%d iterations)", 
+            currentTime, iterationCount) + "                    ");
 
         // collecting metrics across all trains
         int totalCompletedJobs = trains.stream().mapToInt(BatchServerQueue::getCompletedJobs).sum();
