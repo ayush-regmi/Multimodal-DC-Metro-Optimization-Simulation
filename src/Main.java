@@ -1,15 +1,16 @@
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
-
-import static java.lang.System.out;
 
 public class Main {
     public static void main(String[] args) {
@@ -24,17 +25,20 @@ public class Main {
        // }
 
        // for cloud run
-       String stationConfigFile = args.length > 0 ? args[0] : "";
-        if(stationConfigFile.isEmpty()) {
+       String stationConfigFileArg = args.length > 0 ? args[0] : "";
+       final String stationConfigFile;
+        if(stationConfigFileArg.isEmpty()) {
             Path defaultStationsPath = Paths.get("csv", "stations.csv");
             stationConfigFile = defaultStationsPath.toFile().getAbsolutePath();
+        } else {
+            stationConfigFile = stationConfigFileArg;
         }
 
         int numTrainsRange = 20;
         int numBusesRange = 500;
         
         // Use step sizes to reduce search space
-        int trainStep = 2;   // Test every 2nd train (1, 3, 5, 7, 9, ...)
+        int trainStep = 1;   // Test every 2nd train (1, 3, 5, 7, 9, ...)
         int busStep = 25;    // Test every 25th bus (1, 26, 51, 76, ...)
         
         // Calculate number of configurations
@@ -65,28 +69,63 @@ public class Main {
         List<OutputDataConfig> results = new ArrayList<>();
         double simulationDuration = 1440.0; // 24 hours in minutes
         
+        // Determine optimal thread pool size (use available processors)
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        System.out.println("Using " + numThreads + " threads for parallel execution\n");
+        
+        // Create thread pool
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        List<Future<OutputDataConfig>> futures = new ArrayList<>();
+        
+        // Submit all configuration tasks to thread pool
         int configNumber = 0;
         for (int[] num : vehicleNumber) {
             configNumber++;
-            int numTrains = num[0];
-            int numBuses  = num[1];
+            final int finalConfigNumber = configNumber;
+            final int numTrains = num[0];
+            final int numBuses = num[1];
             
-            System.out.println("\n[" + configNumber + "/" + totalConfigurations + "] Testing: " + 
-                             numTrains + " trains, " + numBuses + " buses");
+            // Create a Callable task for each configuration
+            Callable<OutputDataConfig> task = () -> {
+                System.out.println("[" + finalConfigNumber + "/" + totalConfigurations + "] Starting: " + 
+                                 numTrains + " trains, " + numBuses + " buses");
+                
+                SimulationConfig simulationConfig = new SimulationConfig(
+                        numTrains,
+                        500,
+                        250,
+                        numBuses,
+                        50,
+                        75
+                );
 
-            SimulationConfig simulationConfig = new SimulationConfig(
-                    numTrains,
-                    500,
-                    250,
-                    numBuses,
-                    50,
-                    75
-            );
-
-            Simulation simulation = new Simulation(stationConfigFile, simulationConfig);
-            results.add(simulation.run(simulationDuration));
-            System.out.println();
+                Simulation simulation = new Simulation(stationConfigFile, simulationConfig);
+                OutputDataConfig result = simulation.run(simulationDuration);
+                
+                System.out.println("[" + finalConfigNumber + "/" + totalConfigurations + "] Completed: " + 
+                                 numTrains + " trains, " + numBuses + " buses");
+                
+                return result;
+            };
+            
+            futures.add(executor.submit(task));
         }
+        
+        // Collect results from all futures (maintains order)
+        for (int i = 0; i < futures.size(); i++) {
+            try {
+                results.add(futures.get(i).get());
+            } catch (InterruptedException | ExecutionException e) {
+                System.err.println("Error executing configuration " + (i + 1) + ": " + e.getMessage());
+                e.printStackTrace();
+                // Create a placeholder result to maintain order
+                int[] num = vehicleNumber[i];
+                results.add(new OutputDataConfig(num[0], num[1], 0.0, 0.0, 0));
+            }
+        }
+        
+        // Shutdown executor
+        executor.shutdown();
 
         System.out.println("\nSimulation results: ");
         results.forEach(System.out::println);
