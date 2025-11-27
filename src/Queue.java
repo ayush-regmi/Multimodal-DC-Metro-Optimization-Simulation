@@ -10,32 +10,40 @@ public class Queue<T> {
 
     protected int length;
     protected QueueRecord current;
+    protected QueueRecord tail;
 
     public int getLength() { return length; }
     public boolean isQueueEmpty() { return (length == 0); }
 
     public Queue() {
         length = 0;
+        current = null;
+        tail = null;
     }
 
     public void enqueue(T value) {
         QueueRecord newRecord = new QueueRecord(value);
 
-        if(current == null) { current = newRecord; }
-        else {
-            QueueRecord lastValid = current;
-            while(lastValid.nextrecord != null) {
-                lastValid = lastValid.nextrecord;
-            }
-            lastValid.nextrecord = newRecord;
+        if(current == null) {
+            current = newRecord;
+            tail = newRecord;
+        } else {
+            tail.nextrecord = newRecord;
+            tail = newRecord;
         }
         length++;
     }
 
     public T dequeue() {
-        QueueRecord returnR = current;
         if(current == null) return null;
-        else { current = current.nextrecord; }
+        
+        QueueRecord returnR = current;
+        current = current.nextrecord;
+        
+        if(current == null) {
+            tail = null;
+        }
+        
         length--;
         return returnR.value;
     }

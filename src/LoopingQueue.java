@@ -13,6 +13,7 @@ public class LoopingQueue<T> extends Queue<T> {
     }
 
     protected DoublyQueueRecord current;
+    protected DoublyQueueRecord tail;
     private boolean forward = true;
     private final List<CityInfoHolder> stationInfo = new ArrayList<>();
 
@@ -52,13 +53,11 @@ public class LoopingQueue<T> extends Queue<T> {
 
         if (current == null) {
             current = newRecord;
+            tail = newRecord;
         } else {
-            DoublyQueueRecord lastValid = current;
-            while (lastValid.nextrecord != null) {
-                lastValid = lastValid.nextrecord;
-            }
-            lastValid.nextrecord = newRecord;
-            newRecord.prevrecord = lastValid;
+            tail.nextrecord = newRecord;
+            newRecord.prevrecord = tail;
+            tail = newRecord;
         }
         length++;
     }
