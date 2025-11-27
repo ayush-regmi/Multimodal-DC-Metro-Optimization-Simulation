@@ -11,6 +11,12 @@ public class Station {
     private final double lambda;
     private Queue<Job> busStopWaiters = new Queue<>();
     private Random r;
+    
+    // Diagnostic counters
+    private long jobsGenerated = 0;
+    private long jobsPickedUpByBuses = 0;
+    private int maxBusStopWaitersSize = 0;
+    private int maxStationWaitersSize = 0;
 
     public String getName() { return name; }
     public int getPopulation() { return population; }
@@ -20,6 +26,14 @@ public class Station {
     private double lastPickupTime;
 
     public double getLastPickupTime() { return lastPickupTime; }
+    
+    // Diagnostic getters
+    public long getJobsGenerated() { return jobsGenerated; }
+    public long getJobsPickedUpByBuses() { return jobsPickedUpByBuses; }
+    public int getMaxBusStopWaitersSize() { return maxBusStopWaitersSize; }
+    public int getMaxStationWaitersSize() { return maxStationWaitersSize; }
+    public int getCurrentBusStopWaitersSize() { return busStopWaiters.getLength(); }
+    public int getCurrentStationWaitersSize() { return stationWaiters.getLength(); }
 
     public Station(String stationName, double originDistance, int pop, int numWorkers, VehicleInfo busInfoIn) {
         r = new Random();
@@ -102,6 +116,13 @@ public class Station {
             
             Job job = new Job(localCurrentTime, getName(), pickStation(cityInfo));
             busStopWaiters.enqueue(job);
+            jobsGenerated++;
+            
+            // Track maximum queue size
+            int currentSize = busStopWaiters.getLength();
+            if (currentSize > maxBusStopWaitersSize) {
+                maxBusStopWaitersSize = currentSize;
+            }
 
             localCurrentTime += nextArrival;
             if (localCurrentTime >= endTime) break;
@@ -124,6 +145,13 @@ public class Station {
                     if (job.getTimeOfCreation() <= busTime) {
                         stationWaiters.enqueue(busStopWaiters.dequeue());
                         count++;
+                        jobsPickedUpByBuses++;
+                        
+                        // Track maximum station waiters size
+                        int currentSize = stationWaiters.getLength();
+                        if (currentSize > maxStationWaitersSize) {
+                            maxStationWaitersSize = currentSize;
+                        }
                     } else {
                         break;
                     }

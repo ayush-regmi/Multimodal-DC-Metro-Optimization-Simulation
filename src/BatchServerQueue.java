@@ -12,6 +12,10 @@ public class BatchServerQueue {
     private int completedJobs = 0;
     private double totalServiceTime = 0.0;
     private double longestServiceTime = 0.0;
+    
+    // Diagnostic counters
+    private long jobsPickedUpByTrain = 0;
+    private long jobsRejectedWrongDirection = 0;
 
     public int passengerCount() { return currentPassengers.getLength(); }
     public double getTimeOffset() { return timeOffset; }
@@ -20,6 +24,10 @@ public class BatchServerQueue {
     public int getCompletedJobs() { return completedJobs; }
     public double getTotalServiceTime() { return totalServiceTime; }
     public double getLongestServiceTime() { return longestServiceTime; }
+    
+    // Diagnostic getters
+    public long getJobsPickedUpByTrain() { return jobsPickedUpByTrain; }
+    public long getJobsRejectedWrongDirection() { return jobsRejectedWrongDirection; }
     public Station getCurrentStation() { return currentStation; }
 
     public BatchServerQueue(VehicleInfo vehicleInfo, LoopingQueue<Station> stationQueue) {
@@ -52,29 +60,44 @@ public class BatchServerQueue {
         int passengersAlighting = 0;
 
         int capacityLeft = trainInfo.getVehicleCapacity() - currentPassengers.getLength();
-        Queue<Job> tempWaitingQ = new Queue<>();
+        Queue<Job> wrongDirectionQ = new Queue<>();
+        boolean direction = stationQueue.getDirection();
 
+        // First pass: Pick up passengers going in the current direction (priority)
         while(capacityLeft > 0 && !getCurrentStation().stationWaiters.isQueueEmpty()) {
             Job job = getCurrentStation().stationWaiters.dequeue();
             double destinationDistance = getStationDistance(job.getDestStation());
-            boolean direction = stationQueue.getDirection();
 
             if((direction && destinationDistance > stationDistanceFromOrigin) || (!direction && destinationDistance < stationDistanceFromOrigin)) {
                 currentPassengers.enqueue(job);
                 capacityLeft--;
                 passengersBoarding++;
+                jobsPickedUpByTrain++;
             }
             else {
-                tempWaitingQ.enqueue(job);
+                wrongDirectionQ.enqueue(job);
             }
         }
-
-        while(!tempWaitingQ.isQueueEmpty()) {
-            getCurrentStation().stationWaiters.enqueue(tempWaitingQ.dequeue());
+        
+        // Second pass: If there's still capacity, pick up passengers going in the opposite direction
+        // This reduces waiting time and improves throughput
+        while(capacityLeft > 0 && !wrongDirectionQ.isQueueEmpty()) {
+            Job job = wrongDirectionQ.dequeue();
+            currentPassengers.enqueue(job);
+            capacityLeft--;
+            passengersBoarding++;
+            jobsPickedUpByTrain++;
+        }
+        
+        // Put remaining wrong-direction passengers back in the station queue
+        while(!wrongDirectionQ.isQueueEmpty()) {
+            getCurrentStation().stationWaiters.enqueue(wrongDirectionQ.dequeue());
+            jobsRejectedWrongDirection++;
         }
 
         List<Job> passengerList = new ArrayList<>();
-        for(int i = 0; i < currentPassengers.length; i++) {
+        int passengerCount = currentPassengers.getLength();
+        for(int i = 0; i < passengerCount; i++) {
             Job j = currentPassengers.dequeue();
             if(getCurrentStation().getName().equals(j.getDestStation())) {
                 j.complete(currentTime);
