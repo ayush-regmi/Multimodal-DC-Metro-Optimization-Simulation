@@ -28,8 +28,8 @@ jobs:
         
     - name: Compile Java source files
       run: |
-        mkdir -p out/production/CapstoneTrafficProject
-        javac -d out/production/CapstoneTrafficProject src/*.java
+        mkdir -p out/production/MultiModal-DC-Metro-Optimization-Simulation
+        javac -d out/production/MultiModal-DC-Metro-Optimization-Simulation src/*.java
         echo "Compilation successful"
         
     - name: Run simulation
@@ -38,7 +38,7 @@ jobs:
         echo "This will test 200 configurations (10 trains × 20 buses)"
         echo "Each configuration simulates 24 hours of operation"
         echo "Estimated runtime: 1.5-3 hours"
-        java -cp out/production/CapstoneTrafficProject Main
+        java -cp out/production/MultiModal-DC-Metro-Optimization-Simulation Main
         
     - name: Display results summary
       run: |

@@ -138,6 +138,14 @@ public class Simulation {
         double endTime = simulationDurationMinutes;
         int iterationCount = 0;
         
+        // Get all stations for bus processing
+        List<Station> allStations = new ArrayList<>();
+        LoopingQueue<Station> tempQueue = globalStationQueue.cloneQueue();
+        for(int i = 0; i < globalStationQueue.length; i++) {
+            allStations.add(tempQueue.dequeue());
+        }
+        CityInfoHolder[] cityInfo = globalStationQueue.getStationNames();
+        
         // Time-based simulation: run until we reach the end time
         while (currentTime < endTime) {
             iterationCount++;
@@ -145,6 +153,12 @@ public class Simulation {
                 double progress = (currentTime / endTime) * 100;
                 System.out.print("\r" + String.format("Simulation progress: %.1f%% (Time: %.1f/%.1f min)", 
                     progress, currentTime, endTime) + " " + System.currentTimeMillis());
+            }
+            
+            // Process buses at all stations continuously (independent of train arrivals)
+            // This allows buses to pick up passengers regularly, not just when trains arrive
+            for (Station station : allStations) {
+                station.getBusArrivals(currentTime, cityInfo);
             }
             
             double maxTravelTime = 0.0;

@@ -15,17 +15,17 @@ This Java-based simulation models a high-speed rail and bus transportation netwo
 
 1. **Compile the Java source files:**
    ```bash
-   javac -d out/production/CapstoneTrafficProject src/*.java
+   javac -d out/production/MultiModal-DC-Metro-Optimization-Simulation src/*.java
    ```
 
 2. **Run the simulation:**
    ```bash
-   java -cp out/production/CapstoneTrafficProject Main
+   java -cp out/production/MultiModal-DC-Metro-Optimization-Simulation Main
    ```
    
    Or with a custom station configuration file:
    ```bash
-   java -cp out/production/CapstoneTrafficProject Main /path/to/stations.csv
+   java -cp out/production/MultiModal-DC-Metro-Optimization-Simulation Main /path/to/stations.csv
    ```
 
 3. **Results will be saved to:** `csv/results.csv`
