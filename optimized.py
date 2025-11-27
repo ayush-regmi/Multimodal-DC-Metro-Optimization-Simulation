@@ -328,127 +328,162 @@ print("\n" + "=" * 80)
 print("GENERATING VISUALIZATIONS")
 print("=" * 80)
 
-fig = plt.figure(figsize=(20, 14))
+# Create plot directory if it doesn't exist
+plot_dir = 'plot'
+if not os.path.exists(plot_dir):
+    os.makedirs(plot_dir)
+    print(f"Created directory: {plot_dir}")
 
-# 1. Rate of Change Analysis
-ax1 = plt.subplot(3, 3, 1)
+# 1. Rate of Change: Service Time
+fig, ax = plt.subplots(figsize=(10, 6))
 df_sorted_plot = df_sorted[(df_sorted['Vehicles_Increment'] > 0) & (df_sorted['ServiceTime_RatePerVehicle'] > 0)]
 if len(df_sorted_plot) > 0:
-    plt.plot(df_sorted_plot['TotalVehicles'], df_sorted_plot['ServiceTime_RatePerVehicle'], 
+    ax.plot(df_sorted_plot['TotalVehicles'], df_sorted_plot['ServiceTime_RatePerVehicle'], 
              'o-', linewidth=2, markersize=4, label='Service Time Rate', color='blue', alpha=0.7)
-    plt.axhline(service_time_rate_threshold, color='r', linestyle='--', linewidth=2, label='Threshold')
+    ax.axhline(service_time_rate_threshold, color='r', linestyle='--', linewidth=2, label='Threshold')
     if 'knee_point' in locals() and len(knee_point_candidates) > 0:
-        plt.axvline(knee_point['TotalVehicles'], color='green', linestyle='--', linewidth=2, label='Knee Point')
-plt.xlabel('Total Vehicles', fontweight='bold')
-plt.ylabel('Service Time Improvement Rate (min/vehicle)', fontweight='bold')
-plt.title('Rate of Change: Service Time', fontsize=11, fontweight='bold')
-plt.grid(True, alpha=0.3)
-plt.legend(fontsize=8)
+        ax.axvline(knee_point['TotalVehicles'], color='green', linestyle='--', linewidth=2, label='Knee Point')
+ax.set_xlabel('Total Vehicles', fontweight='bold')
+ax.set_ylabel('Service Time Improvement Rate (min/vehicle)', fontweight='bold')
+ax.set_title('Rate of Change: Service Time', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '1_rate_of_change_service_time.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '1_rate_of_change_service_time.png')}")
 
-# 2. Jobs Rate of Change
-ax2 = plt.subplot(3, 3, 2)
+# 2. Rate of Change: Completed Jobs
+fig, ax = plt.subplots(figsize=(10, 6))
 df_sorted_plot_jobs = df_sorted[(df_sorted['Vehicles_Increment'] > 0) & (df_sorted['Jobs_RatePerVehicle'] > 0)]
 if len(df_sorted_plot_jobs) > 0:
-    plt.plot(df_sorted_plot_jobs['TotalVehicles'], df_sorted_plot_jobs['Jobs_RatePerVehicle'], 
+    ax.plot(df_sorted_plot_jobs['TotalVehicles'], df_sorted_plot_jobs['Jobs_RatePerVehicle'], 
              's-', linewidth=2, markersize=4, label='Jobs Rate', color='green', alpha=0.7)
-    plt.axhline(jobs_rate_threshold, color='r', linestyle='--', linewidth=2, label='Threshold')
+    ax.axhline(jobs_rate_threshold, color='r', linestyle='--', linewidth=2, label='Threshold')
     if 'knee_point' in locals() and len(knee_point_candidates) > 0:
-        plt.axvline(knee_point['TotalVehicles'], color='green', linestyle='--', linewidth=2, label='Knee Point')
-plt.xlabel('Total Vehicles', fontweight='bold')
-plt.ylabel('Jobs Improvement Rate (jobs/vehicle)', fontweight='bold')
-plt.title('Rate of Change: Completed Jobs', fontsize=11, fontweight='bold')
-plt.grid(True, alpha=0.3)
-plt.legend(fontsize=8)
+        ax.axvline(knee_point['TotalVehicles'], color='green', linestyle='--', linewidth=2, label='Knee Point')
+ax.set_xlabel('Total Vehicles', fontweight='bold')
+ax.set_ylabel('Jobs Improvement Rate (jobs/vehicle)', fontweight='bold')
+ax.set_title('Rate of Change: Completed Jobs', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '2_rate_of_change_completed_jobs.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '2_rate_of_change_completed_jobs.png')}")
 
 # 3. Service Time vs Total Vehicles
-ax3 = plt.subplot(3, 3, 3)
-plt.scatter(df['TotalVehicles'], df['AvgServiceTime'], 
+fig, ax = plt.subplots(figsize=(10, 6))
+scatter1 = ax.scatter(df['TotalVehicles'], df['AvgServiceTime'], 
             c=df['BusesPerTrain'], cmap='coolwarm', alpha=0.5, s=20, label='All Configs')
-plt.scatter(df_reasonable['TotalVehicles'], df_reasonable['AvgServiceTime'],
+scatter2 = ax.scatter(df_reasonable['TotalVehicles'], df_reasonable['AvgServiceTime'],
             c='green', s=30, marker='*', edgecolors='black', linewidths=0.5,
             label='Reasonable Ratio', zorder=5)
-plt.scatter(final_recommendation['TotalVehicles'], final_recommendation['AvgServiceTime'],
+scatter3 = ax.scatter(final_recommendation['TotalVehicles'], final_recommendation['AvgServiceTime'],
             c='yellow', s=400, marker='D', edgecolors='black', linewidths=2,
             label='Recommended', zorder=6)
-plt.colorbar(label='Train/Bus Ratio')
-plt.xlabel('Total Vehicles', fontweight='bold')
-plt.ylabel('Average Service Time (min)', fontweight='bold')
-plt.title('Service Time vs Fleet Size', fontsize=11, fontweight='bold')
-plt.grid(True, alpha=0.3)
-plt.legend(fontsize=8)
+plt.colorbar(scatter1, ax=ax, label='Buses per Train')
+ax.set_xlabel('Total Vehicles', fontweight='bold')
+ax.set_ylabel('Average Service Time (min)', fontweight='bold')
+ax.set_title('Service Time vs Fleet Size', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '3_service_time_vs_fleet_size.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '3_service_time_vs_fleet_size.png')}")
 
 # 4. Completed Jobs vs Total Vehicles
-ax4 = plt.subplot(3, 3, 4)
-plt.scatter(df['TotalVehicles'], df['CompletedJobs'], 
+fig, ax = plt.subplots(figsize=(10, 6))
+scatter1 = ax.scatter(df['TotalVehicles'], df['CompletedJobs'], 
             c=df['BusesPerTrain'], cmap='coolwarm', alpha=0.5, s=20)
-plt.scatter(df_reasonable['TotalVehicles'], df_reasonable['CompletedJobs'],
-            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5, zorder=5)
-plt.scatter(final_recommendation['TotalVehicles'], final_recommendation['CompletedJobs'],
-            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2, zorder=6)
-plt.colorbar(label='Train/Bus Ratio')
-plt.xlabel('Total Vehicles', fontweight='bold')
-plt.ylabel('Completed Jobs', fontweight='bold')
-plt.title('Throughput vs Fleet Size', fontsize=11, fontweight='bold')
-plt.grid(True, alpha=0.3)
+scatter2 = ax.scatter(df_reasonable['TotalVehicles'], df_reasonable['CompletedJobs'],
+            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5, zorder=5, label='Reasonable Ratio')
+scatter3 = ax.scatter(final_recommendation['TotalVehicles'], final_recommendation['CompletedJobs'],
+            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2, zorder=6, label='Recommended')
+plt.colorbar(scatter1, ax=ax, label='Buses per Train')
+ax.set_xlabel('Total Vehicles', fontweight='bold')
+ax.set_ylabel('Completed Jobs', fontweight='bold')
+ax.set_title('Throughput vs Fleet Size', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '4_throughput_vs_fleet_size.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '4_throughput_vs_fleet_size.png')}")
 
 # 5. Buses per Train Heatmap
-ax5 = plt.subplot(3, 3, 5)
+fig, ax = plt.subplots(figsize=(10, 6))
 heatmap_ratio = df.pivot_table(index='Trains', columns='Buses', values='BusesPerTrain', aggfunc='mean')
 sns.heatmap(heatmap_ratio, cmap='RdYlGn', annot=False, cbar_kws={'label': 'Buses per Train'}, 
-            vmin=min_buses_per_train, vmax=max_buses_per_train)
-plt.axhline(int(final_recommendation['Trains']) - 0.5, color='yellow', linewidth=3, label='Recommended')
-plt.axvline(int(final_recommendation['Buses']) - 0.5, color='yellow', linewidth=3)
-plt.title('Buses per Train Heatmap', fontsize=11, fontweight='bold')
-plt.xlabel('Number of Buses', fontweight='bold')
-plt.ylabel('Number of Trains', fontweight='bold')
+            vmin=min_buses_per_train, vmax=max_buses_per_train, ax=ax)
+ax.axhline(int(final_recommendation['Trains']) - 0.5, color='yellow', linewidth=3, label='Recommended')
+ax.axvline(int(final_recommendation['Buses']) - 0.5, color='yellow', linewidth=3)
+ax.set_title('Buses per Train Heatmap', fontsize=12, fontweight='bold')
+ax.set_xlabel('Number of Buses', fontweight='bold')
+ax.set_ylabel('Number of Trains', fontweight='bold')
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '5_buses_per_train_heatmap.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '5_buses_per_train_heatmap.png')}")
 
 # 6. Composite Score Heatmap
-ax6 = plt.subplot(3, 3, 6)
+fig, ax = plt.subplots(figsize=(10, 6))
 heatmap_score = df_reasonable.pivot_table(index='Trains', columns='Buses', values='CompositeScore', aggfunc='mean')
-sns.heatmap(heatmap_score, cmap='viridis', annot=False, cbar_kws={'label': 'Composite Score'})
-plt.axhline(int(final_recommendation['Trains']) - 0.5, color='yellow', linewidth=3)
-plt.axvline(int(final_recommendation['Buses']) - 0.5, color='yellow', linewidth=3)
-plt.title('Composite Score Heatmap (Reasonable Ratios)', fontsize=11, fontweight='bold')
-plt.xlabel('Number of Buses', fontweight='bold')
-plt.ylabel('Number of Trains', fontweight='bold')
+sns.heatmap(heatmap_score, cmap='viridis', annot=False, cbar_kws={'label': 'Composite Score'}, ax=ax)
+ax.axhline(int(final_recommendation['Trains']) - 0.5, color='yellow', linewidth=3, label='Recommended')
+ax.axvline(int(final_recommendation['Buses']) - 0.5, color='yellow', linewidth=3)
+ax.set_title('Composite Score Heatmap (Reasonable Ratios)', fontsize=12, fontweight='bold')
+ax.set_xlabel('Number of Buses', fontweight='bold')
+ax.set_ylabel('Number of Trains', fontweight='bold')
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '6_composite_score_heatmap.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '6_composite_score_heatmap.png')}")
 
 # 7. Efficiency vs Total Vehicles
-ax7 = plt.subplot(3, 3, 7)
-plt.scatter(df['TotalVehicles'], df['JobsPerVehicle'], 
+fig, ax = plt.subplots(figsize=(10, 6))
+scatter1 = ax.scatter(df['TotalVehicles'], df['JobsPerVehicle'], 
             c=df['AvgServiceTime'], cmap='viridis_r', alpha=0.5, s=20)
-plt.scatter(df_reasonable['TotalVehicles'], df_reasonable['JobsPerVehicle'],
-            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5, zorder=5)
-plt.scatter(final_recommendation['TotalVehicles'], final_recommendation['JobsPerVehicle'],
-            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2, zorder=6)
-plt.colorbar(label='Service Time (min)')
-plt.xlabel('Total Vehicles', fontweight='bold')
-plt.ylabel('Efficiency (Jobs per Vehicle)', fontweight='bold')
-plt.title('Efficiency vs Fleet Size', fontsize=11, fontweight='bold')
-plt.grid(True, alpha=0.3)
+scatter2 = ax.scatter(df_reasonable['TotalVehicles'], df_reasonable['JobsPerVehicle'],
+            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5, zorder=5, label='Reasonable Ratio')
+scatter3 = ax.scatter(final_recommendation['TotalVehicles'], final_recommendation['JobsPerVehicle'],
+            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2, zorder=6, label='Recommended')
+plt.colorbar(scatter1, ax=ax, label='Service Time (min)')
+ax.set_xlabel('Total Vehicles', fontweight='bold')
+ax.set_ylabel('Efficiency (Jobs per Vehicle)', fontweight='bold')
+ax.set_title('Efficiency vs Fleet Size', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '7_efficiency_vs_fleet_size.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '7_efficiency_vs_fleet_size.png')}")
 
 # 8. Pareto Frontier
-ax8 = plt.subplot(3, 3, 8)
-plt.scatter(df['AvgServiceTime'], df['CompletedJobs'], 
+fig, ax = plt.subplots(figsize=(10, 6))
+scatter1 = ax.scatter(df['AvgServiceTime'], df['CompletedJobs'], 
             c=df['TotalVehicles'], cmap='coolwarm', alpha=0.4, s=20, label='All Configs')
-plt.scatter(df_reasonable['AvgServiceTime'], df_reasonable['CompletedJobs'],
+scatter2 = ax.scatter(df_reasonable['AvgServiceTime'], df_reasonable['CompletedJobs'],
             c='green', s=40, marker='*', edgecolors='black', linewidths=0.5,
             label='Reasonable Ratio', zorder=5)
-plt.scatter(final_recommendation['AvgServiceTime'], final_recommendation['CompletedJobs'],
+scatter3 = ax.scatter(final_recommendation['AvgServiceTime'], final_recommendation['CompletedJobs'],
             c='yellow', s=500, marker='D', edgecolors='black', linewidths=2,
             label='Recommended', zorder=6)
-plt.colorbar(label='Total Vehicles')
-plt.xlabel('Average Service Time (min)', fontweight='bold')
-plt.ylabel('Completed Jobs', fontweight='bold')
-plt.title('Pareto Frontier', fontsize=11, fontweight='bold')
-plt.grid(True, alpha=0.3)
-plt.legend(fontsize=8)
+plt.colorbar(scatter1, ax=ax, label='Total Vehicles')
+ax.set_xlabel('Average Service Time (min)', fontweight='bold')
+ax.set_ylabel('Completed Jobs', fontweight='bold')
+ax.set_title('Pareto Frontier', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '8_pareto_frontier.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '8_pareto_frontier.png')}")
 
-# 9. Summary Statistics
-ax9 = plt.subplot(3, 3, 9)
-ax9.axis('off')
-service_level_pct = (final_recommendation['CompletedJobs']/total_workers*100) if total_workers > 0 else 0
-meets_minimum = "✓ YES" if final_recommendation['CompletedJobs'] >= min_jobs_required else "✗ NO"
-
+# 9. Summary Statistics (as text file)
 summary_text = f"""
 ⭐ RECOMMENDED CONFIGURATION
 
@@ -458,8 +493,8 @@ Buses/Train: {final_recommendation['BusesPerTrain']:.1f}
 
 Service Time: {final_recommendation['AvgServiceTime']:.2f} min
 Completed Jobs: {int(final_recommendation['CompletedJobs']):,}
-Service Level: {service_level_pct:.1f}% of workers
-Meets Minimum: {meets_minimum}
+Service Level: {(final_recommendation['CompletedJobs']/total_workers*100) if total_workers > 0 else 0:.1f}% of workers
+Meets Minimum: {'✓ YES' if final_recommendation['CompletedJobs'] >= min_jobs_required else '✗ NO'}
 Total Vehicles: {int(final_recommendation['TotalVehicles'])}
 Efficiency: {final_recommendation['JobsPerVehicle']:.2f} jobs/vehicle
 
@@ -470,12 +505,12 @@ Performance vs Best:
 • Completed Jobs: {((1 - final_recommendation['CompletedJobs']/best_completed_jobs)*100):+.1f}%
 • Vehicle Savings: {int(best_service_config['TotalVehicles'] - final_recommendation['TotalVehicles'])} vs best service
 """
-ax9.text(0.1, 0.5, summary_text, fontsize=10, verticalalignment='center',
-         family='monospace', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-plt.tight_layout()
-plt.savefig('optimization_analysis.png', dpi=300, bbox_inches='tight')
-print("\nVisualization saved as 'optimization_analysis.png'")
+with open(os.path.join(plot_dir, '9_summary_statistics.txt'), 'w') as f:
+    f.write(summary_text)
+print(f"Saved: {os.path.join(plot_dir, '9_summary_statistics.txt')}")
+
+print(f"\nAll visualizations saved to '{plot_dir}/' directory")
 
 # Save summary
 summary_data = {
@@ -492,8 +527,13 @@ summary_data = {
 }
 
 summary_df = pd.DataFrame(summary_data)
-summary_df.to_csv('optimal_configuration.csv', index=False)
-print("Summary saved to 'optimal_configuration.csv'")
+# Ensure csv directory exists
+csv_dir = 'csv'
+if not os.path.exists(csv_dir):
+    os.makedirs(csv_dir)
+csv_path = os.path.join(csv_dir, 'optimal_configuration.csv')
+summary_df.to_csv(csv_path, index=False)
+print(f"Summary saved to '{csv_path}'")
 
 print("\n" + "=" * 80)
 print("ANALYSIS COMPLETE!")
