@@ -274,6 +274,45 @@ public class Simulation {
             totalCompletedJobs,
             totalJobsGenerated > 0 ? (100.0 * totalCompletedJobs / totalJobsGenerated) : 0.0,
             totalJobsPickedUpByTrains > 0 ? (100.0 * totalCompletedJobs / totalJobsPickedUpByTrains) : 0.0));
+        
+        // Calculate optimal train count based on job generation
+        long expectedJobs = (long)(895266 * 0.70); // Approximate total workers (70% commute)
+        System.out.println("\n=== JOB GENERATION ANALYSIS ===");
+        System.out.println("Expected Jobs (70% of workers): " + expectedJobs);
+        System.out.println("Actual Jobs Generated: " + totalJobsGenerated);
+        if (totalJobsGenerated > expectedJobs * 1.5) {
+            System.out.println("WARNING: Job generation is " + String.format("%.1f", (double)totalJobsGenerated / expectedJobs) + "x expected!");
+        }
+        
+        // Calculate train requirements
+        int trainCapacity = trainInfo.getVehicleCapacity();
+        int numStationsForCalc = globalStationQueue.getLength();
+        // Estimate: each train loops through all stations
+        // Average time per station (travel + dwell): ~3.5 minutes
+        double avgStationTime = 3.5;
+        double loopTime = numStationsForCalc * avgStationTime; // minutes per loop
+        double loopsPerDay = 1440.0 / loopTime; // loops per 24-hour day
+        double trainStationVisitsPerDay = trains.size() * loopsPerDay * numStationsForCalc;
+        
+        if (trainStationVisitsPerDay > 0 && totalJobsPickedUpByBuses > 0) {
+            double jobsPerVisit = (double)totalJobsPickedUpByBuses / trainStationVisitsPerDay;
+            double utilization = (jobsPerVisit / trainCapacity) * 100.0;
+            System.out.println("\n=== TRAIN CAPACITY ANALYSIS ===");
+            System.out.println("Train-Station Visits per Day: " + String.format("%.0f", trainStationVisitsPerDay));
+            System.out.println("Jobs per Visit: " + String.format("%.1f", jobsPerVisit));
+            System.out.println("Current Utilization: " + String.format("%.1f", utilization) + "%");
+            
+            // Calculate optimal train count for 80% utilization
+            double targetUtilization = 0.80;
+            int optimalTrains80 = (int)Math.ceil((totalJobsPickedUpByBuses / trainStationVisitsPerDay) / (trainCapacity * targetUtilization) * trains.size());
+            System.out.println("Recommended Trains (for 80% utilization): " + optimalTrains80);
+            
+            // Calculate optimal train count for 50% utilization (more realistic)
+            targetUtilization = 0.50;
+            int optimalTrains50 = (int)Math.ceil((totalJobsPickedUpByBuses / trainStationVisitsPerDay) / (trainCapacity * targetUtilization) * trains.size());
+            System.out.println("Recommended Trains (for 50% utilization): " + optimalTrains50);
+        }
+        
         System.out.println("==============================\n");
 
         return new OutputDataConfig(

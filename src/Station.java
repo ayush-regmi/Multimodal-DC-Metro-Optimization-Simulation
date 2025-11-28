@@ -17,6 +17,12 @@ public class Station {
     private long jobsPickedUpByBuses = 0;
     private int maxBusStopWaitersSize = 0;
     private int maxStationWaitersSize = 0;
+    
+    // Job generation diagnostics
+    private double totalTimeGenerated = 0.0; // Track total time period for which jobs were generated
+    private int generationCalls = 0; // Track how many times generateBusStopWaiters is called
+    private double minInterArrivalTime = Double.MAX_VALUE;
+    private double maxInterArrivalTime = 0.0;
 
     public String getName() { return name; }
     public int getPopulation() { return population; }
@@ -34,6 +40,17 @@ public class Station {
     public int getMaxStationWaitersSize() { return maxStationWaitersSize; }
     public int getCurrentBusStopWaitersSize() { return busStopWaiters.getLength(); }
     public int getCurrentStationWaitersSize() { return stationWaiters.getLength(); }
+    
+    // Additional diagnostic getters
+    public double getTotalTimeGenerated() { return totalTimeGenerated; }
+    public int getGenerationCalls() { return generationCalls; }
+    public double getMinInterArrivalTime() { return minInterArrivalTime == Double.MAX_VALUE ? 0.0 : minInterArrivalTime; }
+    public double getMaxInterArrivalTime() { return maxInterArrivalTime; }
+    public double getExpectedJobsForTimePeriod() {
+        // Calculate expected jobs based on lambda and total time generated
+        // This accounts for time-of-day multipliers (approximate)
+        return lambda * totalTimeGenerated * 1.22; // 1.22 is average multiplier
+    }
 
     public Station(String stationName, double originDistance, int pop, int numWorkers, VehicleInfo busInfoIn) {
         r = new Random();
@@ -48,15 +65,14 @@ public class Station {
         // Base lambda calculation - arrivals per minute
         // Based on numWorkers (commuters), not total population
         // Assumptions:
-        // - 70% of workers commute per day
-        // - Commuters spread over 24 hours with time-of-day multipliers
-        // - Average multiplier over 24h: ~1.22 (peak 2.5x, off-peak 1.0x, late night 0.3x)
-        // - Formula: base_lambda = (numWorkers * commute_rate) / (24_hours * 60_min * avg_multiplier)
-        // - Simplified: base_lambda ≈ numWorkers * 0.0004
+        // - 70% of workers commute per day (one trip each)
+        // - Commuters spread uniformly over 24 hours (base rate)
+        // - Time-of-day multipliers adjust the rate (peak 2.5x, off-peak 1.0x, late night 0.3x)
+        // - Formula: base_lambda = (numWorkers * commute_rate) / (24_hours * 60_min)
+        // - This gives the average arrival rate; time multipliers are applied during generation
         double commuteRate = 0.70; // 70% of workers commute
-        double avgTimeOfDayMultiplier = 1.22; // Weighted average of multipliers over 24h
         double totalMinutesPerDay = 24.0 * 60.0; // 1440 minutes
-        lambda = (getNumWorkers() * commuteRate) / (totalMinutesPerDay * avgTimeOfDayMultiplier);
+        lambda = (getNumWorkers() * commuteRate) / totalMinutesPerDay;
     }
     
     /**
@@ -100,23 +116,87 @@ public class Station {
     }
 
     public void generateBusStopWaiters(double startTime, double endTime, CityInfoHolder[] cityInfo) {
+        // Maximum queue size to prevent memory issues (safety limit)
+        final int MAX_QUEUE_SIZE = 1000000; // 1 million jobs max per queue
+        
+        // Don't generate more jobs if queue is already too large
+        if (busStopWaiters.getLength() >= MAX_QUEUE_SIZE) {
+            return; // Queue is full, stop generating
+        }
+        
+        // Safety check: prevent generating jobs if time period is invalid
+        if (endTime <= startTime || endTime - startTime > 1440.0) {
+            return; // Invalid time period or longer than 24 hours
+        }
+        
+        // Diagnostic: Track generation calls and time periods
+        generationCalls++;
+        double timePeriod = endTime - startTime;
+        totalTimeGenerated += timePeriod;
+        
+        // Maximum generation rate limit: prevent generating more than X jobs per minute
+        // This is a safety limit to prevent runaway generation
+        final double MAX_JOBS_PER_MINUTE = lambda * 5.0; // 5x base rate maximum
+        final int MAX_JOBS_FOR_PERIOD = (int)(MAX_JOBS_PER_MINUTE * timePeriod);
+        
         double localCurrentTime = startTime;
-
+        double currentMultiplier = -1.0; // Track current multiplier to avoid recreating distribution
+        ExponentialDistribution currentDistribution = null;
+        int jobsGeneratedThisCall = 0;
+        
         while (localCurrentTime < endTime) {
+            // Check queue size limit to prevent memory exhaustion
+            if (busStopWaiters.getLength() >= MAX_QUEUE_SIZE) {
+                break; // Stop generating if queue is too large
+            }
+            
+            // Check maximum generation rate limit
+            if (jobsGeneratedThisCall >= MAX_JOBS_FOR_PERIOD) {
+                break; // Stop generating if we've exceeded the maximum rate
+            }
+            
             // Get time-of-day multiplier for current time
             double timeMultiplier = getTimeOfDayMultiplier(localCurrentTime);
             
-            // Adjust arrival rate based on time of day
-            // Higher multiplier = more frequent arrivals (shorter inter-arrival time)
-            double adjustedLambda = lambda * timeMultiplier;
+            // Only create new distribution if multiplier changed
+            if (timeMultiplier != currentMultiplier || currentDistribution == null) {
+                // Adjust arrival rate based on time of day
+                // Higher multiplier = more frequent arrivals (shorter inter-arrival time)
+                double adjustedLambda = lambda * timeMultiplier;
+                
+                // Cap lambda to prevent excessive generation rates
+                // Even during peak, don't exceed 5x base rate
+                double maxLambda = lambda * 5.0;
+                if (adjustedLambda > maxLambda) {
+                    adjustedLambda = maxLambda;
+                }
+                
+                // Reuse Random object from Station to avoid creating new ones
+                currentDistribution = new ExponentialDistribution(adjustedLambda, r);
+                currentMultiplier = timeMultiplier;
+            }
             
-            // Create temporary distribution with adjusted lambda
-            ExponentialDistribution adjustedDistribution = new ExponentialDistribution(adjustedLambda);
-            double nextArrival = adjustedDistribution.sample();
+            double nextArrival = currentDistribution.sample();
+            
+            // Track inter-arrival times for diagnostics
+            if (nextArrival < minInterArrivalTime) {
+                minInterArrivalTime = nextArrival;
+            }
+            if (nextArrival > maxInterArrivalTime) {
+                maxInterArrivalTime = nextArrival;
+            }
+            
+            // Sanity check: if inter-arrival time is extremely small, cap it
+            // This prevents generating millions of jobs in a very short time
+            final double MIN_INTER_ARRIVAL_TIME = 0.0001; // 0.006 seconds minimum
+            if (nextArrival < MIN_INTER_ARRIVAL_TIME) {
+                nextArrival = MIN_INTER_ARRIVAL_TIME;
+            }
             
             Job job = new Job(localCurrentTime, getName(), pickStation(cityInfo));
             busStopWaiters.enqueue(job);
             jobsGenerated++;
+            jobsGeneratedThisCall++;
             
             // Track maximum queue size
             int currentSize = busStopWaiters.getLength();
@@ -130,8 +210,16 @@ public class Station {
     }
 
     public void getBusArrivals(double currentTime, CityInfoHolder[] cityInfo) {
+        // Safety check: prevent generating jobs if time hasn't advanced
+        if (currentTime <= getLastPickupTime()) {
+            return; // No time has passed, don't generate jobs
+        }
+        
         generateBusStopWaiters(getLastPickupTime(), currentTime, cityInfo);
         double busTime = getLastPickupTime();
+        
+        // Maximum queue size for station waiters to prevent memory issues
+        final int MAX_STATION_QUEUE_SIZE = 1000000; // 1 million jobs max
 
         while (busTime < currentTime) {
             int numVehicles = busInfo.getNumVehicles();
@@ -141,6 +229,11 @@ public class Station {
                 int count = 0;
 
                 while (!busStopWaiters.isQueueEmpty() && count < capacityPerBus) {
+                    // Check station queue size limit to prevent memory issues
+                    if (stationWaiters.getLength() >= MAX_STATION_QUEUE_SIZE) {
+                        break; // Stop picking up if station queue is too large
+                    }
+                    
                     Job job = busStopWaiters.current.value;
                     if (job.getTimeOfCreation() <= busTime) {
                         stationWaiters.enqueue(busStopWaiters.dequeue());

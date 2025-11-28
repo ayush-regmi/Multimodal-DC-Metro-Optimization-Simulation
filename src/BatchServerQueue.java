@@ -101,6 +101,7 @@ public class BatchServerQueue {
         }
         
         // Put remaining wrong-direction passengers back in the station queue
+        // Only count these as rejections since they weren't picked up even with bidirectional logic
         while(!wrongDirectionQ.isQueueEmpty()) {
             getCurrentStation().stationWaiters.enqueue(wrongDirectionQ.dequeue());
             jobsRejectedWrongDirection++;
