@@ -16,6 +16,9 @@ public class BatchServerQueue {
     // Diagnostic counters
     private long jobsPickedUpByTrain = 0;
     private long jobsRejectedWrongDirection = 0;
+    private long totalStops = 0;
+    private long stopsAtFullCapacity = 0;
+    private long totalCapacityUsed = 0;
 
     public int passengerCount() { return currentPassengers.getLength(); }
     public double getTimeOffset() { return timeOffset; }
@@ -28,6 +31,13 @@ public class BatchServerQueue {
     // Diagnostic getters
     public long getJobsPickedUpByTrain() { return jobsPickedUpByTrain; }
     public long getJobsRejectedWrongDirection() { return jobsRejectedWrongDirection; }
+    public long getTotalStops() { return totalStops; }
+    public long getStopsAtFullCapacity() { return stopsAtFullCapacity; }
+    public long getTotalCapacityUsed() { return totalCapacityUsed; }
+    public double getCapacityUtilization() {
+        if (totalStops == 0) return 0.0;
+        return (double) totalCapacityUsed / (totalStops * trainInfo.getVehicleCapacity());
+    }
     public Station getCurrentStation() { return currentStation; }
 
     public BatchServerQueue(VehicleInfo vehicleInfo, LoopingQueue<Station> stationQueue) {
@@ -59,7 +69,8 @@ public class BatchServerQueue {
         int passengersBoarding = 0;
         int passengersAlighting = 0;
 
-        int capacityLeft = trainInfo.getVehicleCapacity() - currentPassengers.getLength();
+        int initialPassengerCount = currentPassengers.getLength();
+        int capacityLeft = trainInfo.getVehicleCapacity() - initialPassengerCount;
         Queue<Job> wrongDirectionQ = new Queue<>();
         boolean direction = stationQueue.getDirection();
 
@@ -94,6 +105,15 @@ public class BatchServerQueue {
             getCurrentStation().stationWaiters.enqueue(wrongDirectionQ.dequeue());
             jobsRejectedWrongDirection++;
         }
+        
+        // Track capacity utilization
+        totalStops++;
+        int finalPassengerCount = currentPassengers.getLength();
+        int capacityAfterBoarding = trainInfo.getVehicleCapacity() - finalPassengerCount;
+        if (capacityAfterBoarding == 0) {
+            stopsAtFullCapacity++;
+        }
+        totalCapacityUsed += finalPassengerCount;
 
         List<Job> passengerList = new ArrayList<>();
         int passengerCount = currentPassengers.getLength();

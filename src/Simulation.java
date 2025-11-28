@@ -124,16 +124,43 @@ public class Simulation {
      */
     public OutputDataConfig run(double simulationDurationMinutes) {
         List<BatchServerQueue> trains = new ArrayList<>();
+        int numStations = globalStationQueue.getLength();
+        double minHeadway = 3.0; // 3 minutes minimum headway (in minutes, consistent with timeToTravel units)
+        
         for(int i = 0; i < simConfig.numTrains; i++) {
             LoopingQueue<Station> newQueue = globalStationQueue.cloneQueue();
-            int stationsPerTrain = globalStationQueue.getLength() / simConfig.numTrains;
-            for(int j = 0; j < i * stationsPerTrain; j++) { newQueue.dequeue(); }
-            trains.add(new BatchServerQueue(trainInfo, newQueue));
+            
+            // Distribute trains evenly across the route
+            // If trains <= stations: divide stations among trains
+            // If trains > stations: space trains evenly using modulo (prevents all starting at same position)
+            int startingOffset;
+            if (numStations >= simConfig.numTrains) {
+                // Divide stations among trains
+                int stationsPerTrain = numStations / simConfig.numTrains;
+                startingOffset = i * stationsPerTrain;
+            } else {
+                // Space trains evenly throughout the loop using modulo
+                // This ensures trains are distributed across all stations
+                startingOffset = (i * numStations) / simConfig.numTrains;
+            }
+            
+            // Position train at starting offset
+            for(int j = 0; j < startingOffset; j++) {
+                newQueue.dequeue();
+            }
+            BatchServerQueue train = new BatchServerQueue(trainInfo, newQueue);
+            
+            // Set initial time offset to space trains out evenly
+            // This prevents all trains from starting at the same time
+            // Distribute trains evenly across a time window based on min headway
+            double initialTimeOffset = (i * minHeadway) / Math.max(1, simConfig.numTrains);
+            train.setTimeOffset(initialTimeOffset);
+            
+            trains.add(train);
         }
         
         // Track last departure time for each train to enforce headway
         double[] lastDepartureTime = new double[trains.size()];
-        double minHeadway = 3.0; // 3 minutes minimum headway (in minutes, consistent with timeToTravel units)
         
         double endTime = simulationDurationMinutes;
         int iterationCount = 0;
@@ -141,7 +168,6 @@ public class Simulation {
         // Get all stations for bus processing
         List<Station> allStations = new ArrayList<>();
         LoopingQueue<Station> tempQueue = globalStationQueue.cloneQueue();
-        int numStations = globalStationQueue.getLength();
         for(int i = 0; i < numStations; i++) {
             allStations.add(tempQueue.dequeue());
         }
@@ -217,6 +243,11 @@ public class Simulation {
         int maxBusStopWaiters = allStations.stream().mapToInt(Station::getMaxBusStopWaitersSize).max().orElse(0);
         int maxStationWaiters = allStations.stream().mapToInt(Station::getMaxStationWaitersSize).max().orElse(0);
         
+        // Train capacity utilization statistics
+        long totalTrainStops = trains.stream().mapToLong(BatchServerQueue::getTotalStops).sum();
+        long stopsAtFullCapacity = trains.stream().mapToLong(BatchServerQueue::getStopsAtFullCapacity).sum();
+        double avgCapacityUtilization = trains.stream().mapToDouble(BatchServerQueue::getCapacityUtilization).average().orElse(0.0);
+        
         // Print diagnostic information
         System.out.println("\n=== DIAGNOSTIC INFORMATION ===");
         System.out.println(String.format("Jobs Generated: %,d", totalJobsGenerated));
@@ -229,6 +260,9 @@ public class Simulation {
         System.out.println(String.format("Jobs Rejected (Wrong Direction): %,d", totalJobsRejectedWrongDirection));
         System.out.println(String.format("Remaining at Bus Stops: %,d (Max: %,d)", totalBusStopWaiters, maxBusStopWaiters));
         System.out.println(String.format("Remaining at Stations: %,d (Max: %,d)", totalStationWaiters, maxStationWaiters));
+        System.out.println(String.format("Train Capacity Utilization: %.1f%% (%.1f%% of stops at full capacity)", 
+            avgCapacityUtilization * 100.0,
+            totalTrainStops > 0 ? (100.0 * stopsAtFullCapacity / totalTrainStops) : 0.0));
 
         // collecting metrics across all trains
         int totalCompletedJobs = trains.stream().mapToInt(BatchServerQueue::getCompletedJobs).sum();
