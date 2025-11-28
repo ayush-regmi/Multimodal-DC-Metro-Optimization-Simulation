@@ -34,17 +34,17 @@ public class Main {
             stationConfigFile = stationConfigFileArg;
         }
 
-        int numTrainsRange = 60;
-        int numBusesRange = 1500;
+        int numTrainsRange = 80;
+        int numBusesRange = 800;
         
         // Use step sizes to reduce search space
-        int trainStep = 1;   // Test every 2nd train (1, 3, 5, 7, 9, ...)
-        int busStep = 10;    // Test every 25th bus (1, 26, 51, 76, ...)
+        int trainStep = 1;  
+        int busStep = 10;    // Test every 10th bus
         
         // Calculate number of configurations
         int numTrainValues = (numTrainsRange + trainStep - 1) / trainStep;  // Ceiling division
         int numBusValues = (numBusesRange + busStep - 1) / busStep;  // Ceiling division
-        int totalConfigurations = numTrainValues * numBusValues;
+        int totalConfigurations = numTrainValues * numBusValues - 320;
         
         String separator = "============================================================";
         System.out.println("\n" + separator);
@@ -53,13 +53,12 @@ public class Main {
         System.out.println("Train range: 1-" + numTrainsRange + " (step: " + trainStep + ")");
         System.out.println("Bus range: 1-" + numBusesRange + " (step: " + busStep + ")");
         System.out.println("Total configurations: " + totalConfigurations);
-        System.out.println("Simulation duration: 28 hours (1680 minutes)");
         System.out.println(separator + "\n");
         
         int[][] vehicleNumber = new int[totalConfigurations][2];
         int index = 0;
-        for(int train = 1; train <= numTrainsRange; train += trainStep) {
-            for(int bus = 1; bus <= numBusesRange; bus += busStep) {
+        for(int train = 5; train <= numTrainsRange; train += trainStep) {
+            for(int bus = 10; bus <= numBusesRange; bus += busStep) {
                 vehicleNumber[index][0] = train;
                 vehicleNumber[index][1] = bus;
                 index++;
