@@ -34,12 +34,12 @@ public class Main {
             stationConfigFile = stationConfigFileArg;
         }
 
-        int numTrainsRange = 20;
-        int numBusesRange = 500;
+        int numTrainsRange = 30;
+        int numBusesRange = 1500;
         
         // Use step sizes to reduce search space
         int trainStep = 1;   // Test every 2nd train (1, 3, 5, 7, 9, ...)
-        int busStep = 25;    // Test every 25th bus (1, 26, 51, 76, ...)
+        int busStep = 10;    // Test every 25th bus (1, 26, 51, 76, ...)
         
         // Calculate number of configurations
         int numTrainValues = (numTrainsRange + trainStep - 1) / trainStep;  // Ceiling division

@@ -12,6 +12,13 @@ public class BatchServerQueue {
     private int completedJobs = 0;
     private double totalServiceTime = 0.0;
     private double longestServiceTime = 0.0;
+    
+    // Diagnostic counters
+    private long jobsPickedUpByTrain = 0;
+    private long jobsRejectedWrongDirection = 0;
+    private long totalStops = 0;
+    private long stopsAtFullCapacity = 0;
+    private long totalCapacityUsed = 0;
 
     public int passengerCount() { return currentPassengers.getLength(); }
     public double getTimeOffset() { return timeOffset; }
@@ -20,6 +27,17 @@ public class BatchServerQueue {
     public int getCompletedJobs() { return completedJobs; }
     public double getTotalServiceTime() { return totalServiceTime; }
     public double getLongestServiceTime() { return longestServiceTime; }
+    
+    // Diagnostic getters
+    public long getJobsPickedUpByTrain() { return jobsPickedUpByTrain; }
+    public long getJobsRejectedWrongDirection() { return jobsRejectedWrongDirection; }
+    public long getTotalStops() { return totalStops; }
+    public long getStopsAtFullCapacity() { return stopsAtFullCapacity; }
+    public long getTotalCapacityUsed() { return totalCapacityUsed; }
+    public double getCapacityUtilization() {
+        if (totalStops == 0) return 0.0;
+        return (double) totalCapacityUsed / (totalStops * trainInfo.getVehicleCapacity());
+    }
     public Station getCurrentStation() { return currentStation; }
 
     public BatchServerQueue(VehicleInfo vehicleInfo, LoopingQueue<Station> stationQueue) {
@@ -39,7 +57,7 @@ public class BatchServerQueue {
         return -1;
     }
 
-    public double stopAtStation(double currentTime) {
+    public double stopAtStation(double trainCurrentTime, double globalSimulationTime) {
         currentStation = stationQueue.dequeue();
 
         double stationDistanceFromOrigin = getCurrentStation().getDistanceFromOriginStation();
@@ -51,36 +69,79 @@ public class BatchServerQueue {
         int passengersBoarding = 0;
         int passengersAlighting = 0;
 
-        int capacityLeft = trainInfo.getVehicleCapacity() - currentPassengers.getLength();
-        Queue<Job> tempWaitingQ = new Queue<>();
+        int initialPassengerCount = currentPassengers.getLength();
+        int capacityLeft = trainInfo.getVehicleCapacity() - initialPassengerCount;
+        Queue<Job> wrongDirectionQ = new Queue<>();
+        boolean direction = stationQueue.getDirection();
 
+        // First pass: Pick up passengers going in the current direction (priority)
         while(capacityLeft > 0 && !getCurrentStation().stationWaiters.isQueueEmpty()) {
             Job job = getCurrentStation().stationWaiters.dequeue();
             double destinationDistance = getStationDistance(job.getDestStation());
-            boolean direction = stationQueue.getDirection();
 
             if((direction && destinationDistance > stationDistanceFromOrigin) || (!direction && destinationDistance < stationDistanceFromOrigin)) {
                 currentPassengers.enqueue(job);
                 capacityLeft--;
                 passengersBoarding++;
+                jobsPickedUpByTrain++;
             }
             else {
-                tempWaitingQ.enqueue(job);
+                wrongDirectionQ.enqueue(job);
             }
         }
-
-        while(!tempWaitingQ.isQueueEmpty()) {
-            getCurrentStation().stationWaiters.enqueue(tempWaitingQ.dequeue());
+        
+        // Second pass: If there's still capacity, pick up passengers going in the opposite direction
+        // This reduces waiting time and improves throughput
+        while(capacityLeft > 0 && !wrongDirectionQ.isQueueEmpty()) {
+            Job job = wrongDirectionQ.dequeue();
+            currentPassengers.enqueue(job);
+            capacityLeft--;
+            passengersBoarding++;
+            jobsPickedUpByTrain++;
         }
+        
+        // Put remaining wrong-direction passengers back in the station queue
+        // Only count these as rejections since they weren't picked up even with bidirectional logic
+        while(!wrongDirectionQ.isQueueEmpty()) {
+            getCurrentStation().stationWaiters.enqueue(wrongDirectionQ.dequeue());
+            jobsRejectedWrongDirection++;
+        }
+        
+        // Track capacity utilization
+        totalStops++;
+        int finalPassengerCount = currentPassengers.getLength();
+        int capacityAfterBoarding = trainInfo.getVehicleCapacity() - finalPassengerCount;
+        if (capacityAfterBoarding == 0) {
+            stopsAtFullCapacity++;
+        }
+        totalCapacityUsed += finalPassengerCount;
 
         List<Job> passengerList = new ArrayList<>();
-        for(int i = 0; i < currentPassengers.length; i++) {
+        int passengerCount = currentPassengers.getLength();
+        for(int i = 0; i < passengerCount; i++) {
             Job j = currentPassengers.dequeue();
             if(getCurrentStation().getName().equals(j.getDestStation())) {
-                j.complete(currentTime);
+                // Use global simulation time for job completion to ensure consistent time reference
+                // This prevents negative service times when train time offsets differ from global time
+                double completionTime = Math.max(globalSimulationTime, trainCurrentTime);
+                // Ensure completion time is never less than creation time
+                completionTime = Math.max(completionTime, j.getTimeOfCreation());
+                
+                j.complete(completionTime);
                 completedJobs++;
                 passengersAlighting++;
                 double serviceTime = j.getServiceEndTime() - j.getTimeOfCreation();
+                
+                // Safety check: service time should never be negative
+                if (serviceTime < 0) {
+                    System.err.println("WARNING: Negative service time detected! " +
+                        "Creation: " + j.getTimeOfCreation() + 
+                        ", Completion: " + j.getServiceEndTime() + 
+                        ", Service Time: " + serviceTime);
+                    // Clamp to 0 to prevent negative values
+                    serviceTime = 0.0;
+                }
+                
                 totalServiceTime += serviceTime;
                 longestServiceTime = Math.max(longestServiceTime, serviceTime);
             } else {
@@ -103,8 +164,16 @@ public class BatchServerQueue {
         double dwellTimeInMinutes = totalDwellTime / 60.0;
         timeToTravel += dwellTimeInMinutes;
 
-        currentStation.getBusArrivals(currentTime, stationQueue.getStationNames());
+        // Use global simulation time for bus arrivals to ensure consistency
+        currentStation.getBusArrivals(globalSimulationTime, stationQueue.getStationNames());
         return timeToTravel;
+    }
+    
+    // Overloaded method for backward compatibility (uses train time as global time)
+    // This should not be used in new code - use the two-parameter version instead
+    @Deprecated
+    public double stopAtStation(double currentTime) {
+        return stopAtStation(currentTime, currentTime);
     }
 
     public String toString() { return "Stopping at " + currentStation.getName() + ". Number of passengers: " + passengerCount(); }
