@@ -125,7 +125,7 @@ public class Simulation {
     public OutputDataConfig run(double simulationDurationMinutes) {
         List<BatchServerQueue> trains = new ArrayList<>();
         int numStations = globalStationQueue.getLength();
-        double minHeadway = 3.0; // 3 minutes minimum headway (in minutes, consistent with timeToTravel units)
+        double minHeadway = 1.5; // 3 minutes minimum headway (in minutes, consistent with timeToTravel units)
         
         for(int i = 0; i < simConfig.numTrains; i++) {
             LoopingQueue<Station> newQueue = globalStationQueue.cloneQueue();

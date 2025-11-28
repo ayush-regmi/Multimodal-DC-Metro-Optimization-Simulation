@@ -92,7 +92,7 @@ public class Main {
                 
                 SimulationConfig simulationConfig = new SimulationConfig(
                         numTrains,
-                        500,
+                        1000,
                         250,
                         numBuses,
                         50,
