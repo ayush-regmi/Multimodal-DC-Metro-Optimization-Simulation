@@ -154,10 +154,11 @@ public class BatchServerQueue {
 
         // Calculate dwell time based on passenger activity
         // Base dwell time: 20 seconds
-        // Additional time: 0.5 seconds per boarding passenger, 0.3 seconds per alighting passenger
+        // Additional time: 0.05 seconds per boarding passenger, 0.03 seconds per alighting passenger
+        // (Simulates parallel boarding through multiple doors - effectively ~10 doors working simultaneously)
         double baseDwellTime = 20.0; // seconds
-        double boardingTime = passengersBoarding * 0.5; // seconds per passenger
-        double alightingTime = passengersAlighting * 0.3; // seconds per passenger
+        double boardingTime = passengersBoarding * 0.05; // seconds per passenger (parallel boarding)
+        double alightingTime = passengersAlighting * 0.03; // seconds per passenger (parallel alighting)
         double totalDwellTime = baseDwellTime + boardingTime + alightingTime;
         
         // Convert dwell time to minutes and add to travel time

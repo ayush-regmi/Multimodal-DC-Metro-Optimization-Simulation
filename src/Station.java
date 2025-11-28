@@ -215,7 +215,16 @@ public class Station {
             return; // No time has passed, don't generate jobs
         }
         
-        generateBusStopWaiters(getLastPickupTime(), currentTime, cityInfo);
+        // Stop generating new people after 24 hours (1440 minutes)
+        // But continue processing buses/trains to pick up existing waiters
+        double generationCutoff = 1440.0;
+        
+        // Only generate if we haven't passed the cutoff
+        if (getLastPickupTime() < generationCutoff) {
+            // Cap the generation end time to 1440
+            double genEndTime = Math.min(currentTime, generationCutoff);
+            generateBusStopWaiters(getLastPickupTime(), genEndTime, cityInfo);
+        }
         double busTime = getLastPickupTime();
         
         // Maximum queue size for station waiters to prevent memory issues

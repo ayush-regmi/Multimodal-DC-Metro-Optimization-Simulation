@@ -34,7 +34,7 @@ public class Main {
             stationConfigFile = stationConfigFileArg;
         }
 
-        int numTrainsRange = 30;
+        int numTrainsRange = 60;
         int numBusesRange = 1500;
         
         // Use step sizes to reduce search space
@@ -53,7 +53,7 @@ public class Main {
         System.out.println("Train range: 1-" + numTrainsRange + " (step: " + trainStep + ")");
         System.out.println("Bus range: 1-" + numBusesRange + " (step: " + busStep + ")");
         System.out.println("Total configurations: " + totalConfigurations);
-        System.out.println("Simulation duration: 24 hours (1440 minutes)");
+        System.out.println("Simulation duration: 28 hours (1680 minutes)");
         System.out.println(separator + "\n");
         
         int[][] vehicleNumber = new int[totalConfigurations][2];
@@ -67,7 +67,7 @@ public class Main {
         }
 
         List<OutputDataConfig> results = new ArrayList<>();
-        double simulationDuration = 1440.0; // 24 hours in minutes
+        double simulationDuration = 1680.0; // 28 hours in minutes (24h generation + 4h clearance)
         
         // Determine optimal thread pool size (use available processors)
         int numThreads = Runtime.getRuntime().availableProcessors();
@@ -92,7 +92,7 @@ public class Main {
                 
                 SimulationConfig simulationConfig = new SimulationConfig(
                         numTrains,
-                        500,
+                        1000,
                         250,
                         numBuses,
                         50,
