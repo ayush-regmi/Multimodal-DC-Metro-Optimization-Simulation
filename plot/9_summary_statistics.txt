@@ -2,19 +2,19 @@
 ⭐ RECOMMENDED CONFIGURATION
 
 Trains: 30
-Buses: 161
-Buses/Train: 5.4
+Buses: 151
+Buses/Train: 5.0
 
-Service Time: 120.68 min
-Completed Jobs: 308,127
-Service Level: 34.4% of workers
-Meets Minimum: ✗ NO
-Total Vehicles: 191
-Efficiency: 1613.23 jobs/vehicle
+Service Time: 177.96 min
+Completed Jobs: 710,663
+Service Level: 79.4% of workers
+Meets Minimum: ✓ YES
+Total Vehicles: 181
+Efficiency: 3926.31 jobs/vehicle
 
-Composite Score: 0.9079
+Composite Score: 0.8839
 
 Performance vs Best:
-• Service Time: +0.4%
+• Service Time: +1.4%
 • Completed Jobs: +0.1%
-• Vehicle Savings: 330 vs best service
+• Vehicle Savings: -120 vs best service

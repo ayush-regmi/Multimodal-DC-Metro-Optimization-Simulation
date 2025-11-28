@@ -1,9 +1,9 @@
 Metric,Value
 Recommended Trains,30
-Recommended Buses,161
-Buses per Train,5.4
-Service Time (min),120.68
-Completed Jobs,308127
-Total Vehicles,191
-Efficiency (jobs/vehicle),1613.23
-Composite Score,0.9079
+Recommended Buses,151
+Buses per Train,5.0
+Service Time (min),177.96
+Completed Jobs,710663
+Total Vehicles,181
+Efficiency (jobs/vehicle),3926.31
+Composite Score,0.8839
