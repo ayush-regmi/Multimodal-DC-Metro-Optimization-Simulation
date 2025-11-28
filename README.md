@@ -2,6 +2,8 @@
 
 A comprehensive simulation and optimization framework for analyzing high-speed rail and bus transportation networks in the Washington D.C. metropolitan area. This project uses discrete-event simulation and queueing theory to model passenger flow through a multi-modal transit system and identifies optimal fleet configurations.
 
+The project simultaes a "Straight Line" route from Frederick, MD, traveling down the I-270 corridor to **Washington, D.C.** with 8 stations in between.
+
 ## Project Overview
 
 This project simulates a hub-and-spoke transit system where:
@@ -72,7 +74,7 @@ Based on analysis of thousands of fleet configurations, the **minimum viable fle
 ### Step 1: Compile Java Simulation
 
 ```bash
-javac -d out/production/CapstoneTrafficProject src/*.java
+javac -d out/production/MultiModal-DC-Metro-Optimization-Simulation src/*.java
 ```
 
 ### Step 2: Run Simulation
@@ -80,8 +82,31 @@ javac -d out/production/CapstoneTrafficProject src/*.java
 The simulation tests multiple fleet configurations in parallel:
 
 ```bash
-java -cp out/production/CapstoneTrafficProject Main
+java -cp out/production/MultiModal-DC-Metro-Optimization-Simulation Main
 ```
+
+## Cloud Execution (GitHub Actions)
+
+This repository includes a CI/CD pipeline (.github/workflows/run-simulation.yml) that:
+
+1. Provisions a Linux runner.
+
+2. Compiles the Java application.
+
+3. Executes the full simulation suite (testing hundreds of fleet combinations).
+
+4. Runs the Python optimization analysis.
+
+5. Uploads the results (csv and plot folders) as a downloadable artifact.
+
+### To trigger a run:
+
+1. Go to the Actions tab in this repository.
+
+2. Select the Run Simulation workflow.
+
+3. Click the Run workflow button.
+
 
 **Configuration Parameters** (in `Main.java`):
 - Train range: 1-80 trains (step size: 1)
@@ -128,28 +153,28 @@ These plots show how adding vehicles impacts system performance:
 - Helps identify where train additions provide diminishing returns
 - X-axis: Number of trains
 - Y-axis: Service time improvement rate (min/train)
-[Plot 1](plot/1_rate_of_change_service_time_vs_trains.png)
+![Plot 1](plot/1_rate_of_change_service_time_vs_trains.png)
 
 **Plot 2: Service Time Rate vs Buses** (Train Range: 20-40)
 - Shows improvement in service time per additional bus
 - Demonstrates bus effectiveness within a fixed train fleet
 - X-axis: Number of buses
 - Y-axis: Service time improvement rate (min/bus)
-[Plot 2](plot/2_rate_of_change_service_time_vs_buses.png)
+![Plot 2](plot/2_rate_of_change_service_time_vs_buses.png)
 
 **Plot 3: Jobs Rate vs Trains** (Bus Range: 150-300)
 - Shows increase in completed jobs per additional train
 - Critical for understanding train-limited bottlenecks
 - X-axis: Number of trains
 - Y-axis: Jobs improvement rate (jobs/train)
-[Plot 3](plot/3_rate_of_change_jobs_vs_trains.png)
+![Plot 3](plot/3_rate_of_change_jobs_vs_trains.png)
 
 **Plot 4: Jobs Rate vs Buses** (Train Range: 20-40)
 - Shows increase in completed jobs per additional bus
 - Helps identify bus saturation points
 - X-axis: Number of buses
 - Y-axis: Jobs improvement rate (jobs/bus)
-[Plot 4](plot/4_rate_of_change_jobs_vs_buses.png)
+![Plot 4](plot/4_rate_of_change_jobs_vs_buses.png)
 
 ### Plateau Analysis (Plots 6-9)
 
@@ -160,21 +185,21 @@ These plots demonstrate where system performance plateaus:
 - Vertical red line marks the plateau point
 - Shaded region indicates plateau zone
 - **Key Insight**: Adding trains beyond 30 doesn't increase throughput, but improves service time
-[Plot 6](plot/6_jobs_vs_trains_plateau.png)
+![Plot 6](plot/6_jobs_vs_trains_plateau.png)
 **Plot 7: Service Time vs Trains Plateau**
 - Shows service time continues improving beyond 30 trains
 - Plateaus at **55 trains**
 - **Key Insight**: Trains improve service time even after jobs plateau
-[Plot 7](plot/7_service_time_vs_trains_plateau.png)
+![Plot 7](plot/7_service_time_vs_trains_plateau.png)
 **Plot 8: Jobs vs Buses Plateau**
 - Shows completed jobs plateauing at **180 buses**
 - Demonstrates bus saturation point
 - **Key Insight**: System is train-limited, not bus-limited
-[Plot 8](plot/8_jobs_vs_buses_plateau.png)
+![Plot 8](plot/8_jobs_vs_buses_plateau.png)
 **Plot 9: Service Time vs Buses Plateau**
 - Shows service time plateauing at **400 buses**
 - **Key Insight**: Buses have diminishing returns for both metrics
-[Plot 9](plot/9_service_time_vs_buses_plateau.png)
+![Plot 9](plot/9_service_time_vs_buses_plateau.png)
 ### Heatmap (Plot 5)
 
 **Buses per Train Heatmap**
@@ -182,7 +207,7 @@ These plots demonstrate where system performance plateaus:
 - Helps identify reasonable fleet configurations
 - Yellow lines mark recommended configuration
 - **Key Insight**: Optimal ratio is ~5-10 buses per train
-[Plot 5](plot/5_buses_per_train_heatmap.png)
+![Plot 5](plot/5_buses_per_train_heatmap.png)
 ## Technical Details
 
 ### Simulation Model
@@ -249,8 +274,4 @@ The simulation successfully identifies the **minimum viable fleet configuration*
 
 ## License
 
-This project was developed as a CMIS202 Capstone Project.
-
-## Authors
-
-Developed for the Multimodal DC Metro Optimization Simulation capstone project.
+This project was developed as a CMIS202 Capstone Project by **Ayush Regmi**. 
