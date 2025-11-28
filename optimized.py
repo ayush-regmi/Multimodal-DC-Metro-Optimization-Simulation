@@ -68,89 +68,57 @@ def normalize_series(series, reverse=False):
 df['NormServiceTime'] = normalize_series(df['AvgServiceTime'], reverse=True)  # Lower is better
 df['NormCompletedJobs'] = normalize_series(df['CompletedJobs'], reverse=False)  # Higher is better
 df['NormEfficiency'] = normalize_series(df['JobsPerVehicle'], reverse=False)  # Higher is better
-df['NormTotalVehicles'] = normalize_series(df['TotalVehicles'], reverse=True)  # Lower is better (cost)
 
 # Calculate rate of change for service time and completed jobs
 print("\n" + "=" * 80)
-print("RATE OF CHANGE ANALYSIS (Finding Diminishing Returns)")
+print("RATE OF CHANGE ANALYSIS (Trains vs Buses)")
 print("=" * 80)
 
-# Sort by total vehicles for rate of change calculation
-df_sorted = df.sort_values('TotalVehicles').reset_index(drop=True)
+# Rate of Change vs Trains (within bus range 150-300)
+print("\nCalculating rate of change vs increasing trains (bus range: 150-300)...")
+df_bus_range = df[(df['Buses'] >= 150) & (df['Buses'] <= 300)].copy()
 
-# Calculate rate of change (derivative approximation)
-df_sorted['ServiceTime_RateOfChange'] = df_sorted['AvgServiceTime'].diff() * -1  # Negative because lower is better
-df_sorted['Jobs_RateOfChange'] = df_sorted['CompletedJobs'].diff()
-df_sorted['Vehicles_Increment'] = df_sorted['TotalVehicles'].diff()
+# Group by trains and calculate mean metrics
+train_analysis = df_bus_range.groupby('Trains').agg({
+    'AvgServiceTime': 'mean',
+    'CompletedJobs': 'mean'
+}).reset_index().sort_values('Trains')
 
-# Normalize rate of change per vehicle added
-df_sorted['ServiceTime_RatePerVehicle'] = df_sorted['ServiceTime_RateOfChange'] / df_sorted['Vehicles_Increment']
-df_sorted['Jobs_RatePerVehicle'] = df_sorted['Jobs_RateOfChange'] / df_sorted['Vehicles_Increment']
+# Calculate rate of change
+train_analysis['ServiceTime_RateOfChange'] = -train_analysis['AvgServiceTime'].diff()  # Negative because lower is better
+train_analysis['Jobs_RateOfChange'] = train_analysis['CompletedJobs'].diff()
+train_analysis['Train_Increment'] = train_analysis['Trains'].diff()
+
+# Normalize per train
+train_analysis['ServiceTime_RatePerTrain'] = train_analysis['ServiceTime_RateOfChange'] / train_analysis['Train_Increment']
+train_analysis['Jobs_RatePerTrain'] = train_analysis['Jobs_RateOfChange'] / train_analysis['Train_Increment']
 
 # Replace NaN and inf values
-df_sorted['ServiceTime_RatePerVehicle'] = df_sorted['ServiceTime_RatePerVehicle'].replace([np.inf, -np.inf], 0).fillna(0)
-df_sorted['Jobs_RatePerVehicle'] = df_sorted['Jobs_RatePerVehicle'].replace([np.inf, -np.inf], 0).fillna(0)
+train_analysis['ServiceTime_RatePerTrain'] = train_analysis['ServiceTime_RatePerTrain'].replace([np.inf, -np.inf], 0).fillna(0)
+train_analysis['Jobs_RatePerTrain'] = train_analysis['Jobs_RatePerTrain'].replace([np.inf, -np.inf], 0).fillna(0)
 
-# Find knee point: where rate of change drops significantly
-# Only consider positive improvements (service time decreasing, jobs increasing)
-df_sorted_improving = df_sorted[
-    (df_sorted['ServiceTime_RatePerVehicle'] > 0) &  # Service time improving (decreasing)
-    (df_sorted['Jobs_RatePerVehicle'] > 0)  # Jobs improving (increasing)
-].copy()
+# Rate of Change vs Buses (within train range 20-40)
+print("Calculating rate of change vs increasing buses (train range: 20-40)...")
+df_train_range = df[(df['Trains'] >= 20) & (df['Trains'] <= 40)].copy()
 
-if len(df_sorted_improving) > 0:
-    # Use percentile-based threshold for improving configurations
-    service_time_rate_threshold = df_sorted_improving['ServiceTime_RatePerVehicle'].quantile(0.25)  # Bottom 25%
-    jobs_rate_threshold = df_sorted_improving['Jobs_RatePerVehicle'].quantile(0.25)  # Bottom 25%
-    
-    print(f"\nRate of Change Thresholds (for improving configurations):")
-    print(f"  Service Time improvement threshold: {service_time_rate_threshold:.4f} min/vehicle")
-    print(f"  Jobs improvement threshold: {jobs_rate_threshold:.2f} jobs/vehicle")
-    
-    # Find configurations where rate of change is below threshold (diminishing returns)
-    knee_point_candidates = df_sorted_improving[
-        (df_sorted_improving['ServiceTime_RatePerVehicle'] < service_time_rate_threshold) &
-        (df_sorted_improving['Jobs_RatePerVehicle'] < jobs_rate_threshold) &
-        (df_sorted_improving['TotalVehicles'] > df_sorted_improving['TotalVehicles'].min())
-    ].copy()
-else:
-    # Fallback: use all data
-    service_time_rate_threshold = df_sorted['ServiceTime_RatePerVehicle'].quantile(0.25)
-    jobs_rate_threshold = df_sorted['Jobs_RatePerVehicle'].quantile(0.25)
-    print(f"\nRate of Change Thresholds:")
-    print(f"  Service Time improvement threshold: {service_time_rate_threshold:.4f} min/vehicle")
-    print(f"  Jobs improvement threshold: {jobs_rate_threshold:.2f} jobs/vehicle")
-    knee_point_candidates = df_sorted[
-        (df_sorted['ServiceTime_RatePerVehicle'] > 0) &
-        (df_sorted['Jobs_RatePerVehicle'] > 0) &
-        (df_sorted['TotalVehicles'] > df_sorted['TotalVehicles'].min())
-    ].copy()
+# Group by buses and calculate mean metrics
+bus_analysis = df_train_range.groupby('Buses').agg({
+    'AvgServiceTime': 'mean',
+    'CompletedJobs': 'mean'
+}).reset_index().sort_values('Buses')
 
-if len(knee_point_candidates) > 0:
-    # Take the first (minimum vehicles) knee point
-    knee_point = knee_point_candidates.iloc[0]
-    print(f"\n⭐ KNEE POINT FOUND (Point of Diminishing Returns):")
-    print(f"  Total Vehicles: {int(knee_point['TotalVehicles'])}")
-    print(f"  Trains: {int(knee_point['Trains'])}, Buses: {int(knee_point['Buses'])}")
-    print(f"  Service Time: {knee_point['AvgServiceTime']:.2f} min")
-    print(f"  Completed Jobs: {int(knee_point['CompletedJobs'])}")
-    print(f"  Service Time Rate: {knee_point['ServiceTime_RatePerVehicle']:.4f} min/vehicle")
-    print(f"  Jobs Rate: {knee_point['Jobs_RatePerVehicle']:.2f} jobs/vehicle")
-else:
-    print("\n⚠ No clear knee point found. Using alternative method...")
-    # Alternative: find where improvement rate drops below median
-    median_service_rate = df_sorted['ServiceTime_RatePerVehicle'].median()
-    median_jobs_rate = df_sorted['Jobs_RatePerVehicle'].median()
-    knee_point_candidates = df_sorted[
-        (df_sorted['ServiceTime_RatePerVehicle'] < median_service_rate) &
-        (df_sorted['Jobs_RatePerVehicle'] < median_jobs_rate) &
-        (df_sorted['TotalVehicles'] > df_sorted['TotalVehicles'].min())
-    ].copy()
-    if len(knee_point_candidates) > 0:
-        knee_point = knee_point_candidates.iloc[0]
-    else:
-        # Fallback: use median total vehicles
-        knee_point = df_sorted.iloc[len(df_sorted) // 2]
+# Calculate rate of change
+bus_analysis['ServiceTime_RateOfChange'] = -bus_analysis['AvgServiceTime'].diff()  # Negative because lower is better
+bus_analysis['Jobs_RateOfChange'] = bus_analysis['CompletedJobs'].diff()
+bus_analysis['Bus_Increment'] = bus_analysis['Buses'].diff()
+
+# Normalize per bus
+bus_analysis['ServiceTime_RatePerBus'] = bus_analysis['ServiceTime_RateOfChange'] / bus_analysis['Bus_Increment']
+bus_analysis['Jobs_RatePerBus'] = bus_analysis['Jobs_RateOfChange'] / bus_analysis['Bus_Increment']
+
+# Replace NaN and inf values
+bus_analysis['ServiceTime_RatePerBus'] = bus_analysis['ServiceTime_RatePerBus'].replace([np.inf, -np.inf], 0).fillna(0)
+bus_analysis['Jobs_RatePerBus'] = bus_analysis['Jobs_RatePerBus'].replace([np.inf, -np.inf], 0).fillna(0)
 
 # Train/Bus Ratio Analysis
 print("\n" + "=" * 80)
@@ -206,95 +174,48 @@ else:
 # Use configurations that meet minimum for optimization
 df_reasonable = df_meets_minimum.copy()
 
-# Composite Score Calculation
+# Optimization: Minimum Viable Fleet
 print("\n" + "=" * 80)
-print("COMPOSITE SCORE CALCULATION")
+print("OPTIMIZATION: MINIMUM VIABLE FLEET")
 print("=" * 80)
 
-# Weight factors (sum should be 1.0)
-# Mass Transit Priority: Throughput (Completed Jobs) is KING
-# A system that only moves 5,000 people when demand is 50,000 is a failure
-# regardless of how "efficient" those few vehicles are
-WEIGHT_COMPLETED_JOBS = 0.60  # Throughput is the primary goal (60%)
-WEIGHT_SERVICE_TIME = 0.20    # Service time matters but secondary (20%)
-WEIGHT_EFFICIENCY = 0.10      # Efficiency per vehicle is nice but not critical (10%)
-WEIGHT_COST = 0.10            # Cost (fewer vehicles) is a constraint, not the goal (10%)
+# 1. HARD CONSTRAINT: Must meet service level (70% jobs)
+valid_configs = df_reasonable[df_reasonable['CompletedJobs'] >= min_jobs_required].copy()
 
-# Calculate composite score (higher is better)
-df_reasonable['CompositeScore'] = (
-    WEIGHT_SERVICE_TIME * df_reasonable['NormServiceTime'] +
-    WEIGHT_COMPLETED_JOBS * df_reasonable['NormCompletedJobs'] +
-    WEIGHT_EFFICIENCY * df_reasonable['NormEfficiency'] +
-    WEIGHT_COST * df_reasonable['NormTotalVehicles']
-)
-
-# Find optimal configuration with reasonable ratio
-optimal_idx = df_reasonable['CompositeScore'].idxmax()
-optimal_config = df_reasonable.loc[optimal_idx]
-
-print(f"\nOptimal Configuration (with reasonable train/bus ratio):")
-print(f"  Trains: {int(optimal_config['Trains'])}, Buses: {int(optimal_config['Buses'])}")
-print(f"  Buses per Train: {optimal_config['BusesPerTrain']:.1f}")
-print(f"  Service Time: {optimal_config['AvgServiceTime']:.2f} min")
-print(f"  Completed Jobs: {int(optimal_config['CompletedJobs'])}")
-print(f"  Total Vehicles: {int(optimal_config['TotalVehicles'])}")
-print(f"  Efficiency: {optimal_config['JobsPerVehicle']:.2f} jobs/vehicle")
-print(f"  Composite Score: {optimal_config['CompositeScore']:.4f}")
-
-# Find optimal configuration considering rate of change (knee point)
-print("\n" + "=" * 80)
-print("OPTIMAL CONFIGURATION (Rate of Change Method)")
-print("=" * 80)
-
-# Improved knee point detection: look for negligible improvement (< 1% gain)
-# Calculate percentage improvement per vehicle increment for reasonable configurations
-df_reasonable_sorted = df_reasonable.sort_values('TotalVehicles').reset_index(drop=True)
-df_reasonable_sorted['ServiceTime_PctImprovement'] = (
-    df_reasonable_sorted['AvgServiceTime'].pct_change() * -1 * 100  # Negative pct change (lower is better)
-)
-df_reasonable_sorted['Jobs_PctImprovement'] = (
-    df_reasonable_sorted['CompletedJobs'].pct_change() * 100
-)
-df_reasonable_sorted['Vehicles_Increment'] = df_reasonable_sorted['TotalVehicles'].diff()
-
-# Find where improvement becomes negligible (< 1% per vehicle increment)
-# Only consider configurations with at least moderate fleet size (avoid tiny fleets)
-min_fleet_size = df_reasonable_sorted['TotalVehicles'].quantile(0.3)  # At least 30th percentile
-
-negligible_improvement = df_reasonable_sorted[
-    (df_reasonable_sorted['ServiceTime_PctImprovement'].fillna(100) < 1.0) &
-    (df_reasonable_sorted['Jobs_PctImprovement'].fillna(100) < 1.0) &
-    (df_reasonable_sorted['TotalVehicles'] >= min_fleet_size) &
-    (df_reasonable_sorted['Vehicles_Increment'] > 0)
-].copy()
-
-if len(negligible_improvement) > 0:
-    # Use the configuration with best composite score among negligible improvement points
-    knee_optimal = negligible_improvement.loc[negligible_improvement['CompositeScore'].idxmax()]
-    print(f"\n⭐ RECOMMENDED OPTIMAL CONFIGURATION (Negligible Improvement Point):")
-    print(f"  Trains: {int(knee_optimal['Trains'])}, Buses: {int(knee_optimal['Buses'])}")
-    print(f"  Buses per Train: {knee_optimal['BusesPerTrain']:.1f}")
-    print(f"  Service Time: {knee_optimal['AvgServiceTime']:.2f} min")
-    print(f"  Completed Jobs: {int(knee_optimal['CompletedJobs'])}")
-    print(f"  Total Vehicles: {int(knee_optimal['TotalVehicles'])}")
-    print(f"  Efficiency: {knee_optimal['JobsPerVehicle']:.2f} jobs/vehicle")
-    print(f"  Composite Score: {knee_optimal['CompositeScore']:.4f}")
-    
-    # Compare knee point with composite score optimal
-    # Use the one with better composite score (prioritize throughput)
-    if knee_optimal['CompositeScore'] >= optimal_config['CompositeScore'] * 0.95:
-        # Knee point is within 5% of optimal composite score - use it
-        final_recommendation = knee_optimal
-        print(f"\n  ✓ Knee point selected (composite score within 5% of optimal)")
-    else:
-        # Composite score method is significantly better - use it instead
-        final_recommendation = optimal_config
-        print(f"\n  ✓ Composite score method selected (significantly better than knee point)")
-        print(f"    Knee point composite score: {knee_optimal['CompositeScore']:.4f}")
-        print(f"    Optimal composite score: {optimal_config['CompositeScore']:.4f}")
+if len(valid_configs) == 0:
+    print(f"❌ NO configuration met the target of {min_jobs_required:,} jobs.")
+    print("   Falling back to 'Best Effort' (Maximizing Jobs)...")
+    best_config = df_reasonable.loc[df_reasonable['CompletedJobs'].idxmax()]
+    reason = "Max Possible Throughput (Target not met)"
 else:
-    print(f"\n⚠ No negligible improvement point found. Using optimal configuration from composite score method.")
-    final_recommendation = optimal_config
+    print(f"✅ {len(valid_configs)} configurations met the target.")
+    
+    # 2. SOFT CONSTRAINT: Filter out terrible service times
+    #    (e.g., keep only configs within 20% of the best service time found among valid ones)
+    best_valid_time = valid_configs['AvgServiceTime'].min()
+    acceptable_time = best_valid_time * 1.20  # Allow 20% buffer
+    
+    refined_configs = valid_configs[valid_configs['AvgServiceTime'] <= acceptable_time].copy()
+    print(f"   {len(refined_configs)} configurations also have acceptable service time (<{acceptable_time:.1f} min).")
+    
+    # 3. OPTIMIZATION: Sort by Trains (Primary Cost), then Buses (Secondary Cost)
+    #    This ensures we pick the ABSOLUTE MINIMUM number of trains needed.
+    refined_configs = refined_configs.sort_values(by=['Trains', 'Buses'], ascending=[True, True])
+    
+    best_config = refined_configs.iloc[0]
+    reason = "Minimum Trains satisfying all constraints"
+
+# Display Result
+print(f"\n⭐ RECOMMENDED CONFIGURATION ({reason})")
+print(f"   Trains: {int(best_config['Trains'])}")
+print(f"   Buses:  {int(best_config['Buses'])}")
+print(f"   --------------------------------")
+print(f"   Jobs Completed: {int(best_config['CompletedJobs']):,} (Target: {min_jobs_required:,})")
+print(f"   Avg Service Time: {best_config['AvgServiceTime']:.2f} min")
+print(f"   Buses per Train: {best_config['Buses'] / best_config['Trains']:.1f}")
+print(f"   Efficiency: {best_config['JobsPerVehicle']:.2f} jobs/vehicle")
+
+final_recommendation = best_config
 
 # Comparison with best possible
 print("\n" + "=" * 80)
@@ -319,9 +240,6 @@ print(f"  Completed Jobs: {int(final_recommendation['CompletedJobs']):,}")
 print(f"    Difference: {int(final_recommendation['CompletedJobs'] - best_completed_jobs):,} jobs ({((1 - final_recommendation['CompletedJobs']/best_completed_jobs)*100):.1f}% less)")
 print(f"  Service Level: {(final_recommendation['CompletedJobs']/total_workers*100):.1f}% of workers served")
 print(f"    Meets minimum ({MIN_JOBS_PERCENTAGE*100:.0f}%): {'✓ YES' if final_recommendation['CompletedJobs'] >= min_jobs_required else '✗ NO'}")
-print(f"  Total Vehicles: {int(final_recommendation['TotalVehicles'])}")
-print(f"    Savings vs best service: {int(best_service_config['TotalVehicles'] - final_recommendation['TotalVehicles'])} vehicles")
-print(f"    Savings vs best jobs: {int(best_jobs_config['TotalVehicles'] - final_recommendation['TotalVehicles'])} vehicles")
 
 # Visualization
 print("\n" + "=" * 80)
@@ -334,83 +252,69 @@ if not os.path.exists(plot_dir):
     os.makedirs(plot_dir)
     print(f"Created directory: {plot_dir}")
 
-# 1. Rate of Change: Service Time
+# 1. Rate of Change: Service Time vs Increasing Trains (bus range 150-300)
 fig, ax = plt.subplots(figsize=(10, 6))
-df_sorted_plot = df_sorted[(df_sorted['Vehicles_Increment'] > 0) & (df_sorted['ServiceTime_RatePerVehicle'] > 0)]
-if len(df_sorted_plot) > 0:
-    ax.plot(df_sorted_plot['TotalVehicles'], df_sorted_plot['ServiceTime_RatePerVehicle'], 
-             'o-', linewidth=2, markersize=4, label='Service Time Rate', color='blue', alpha=0.7)
-    ax.axhline(service_time_rate_threshold, color='r', linestyle='--', linewidth=2, label='Threshold')
-    if 'knee_point' in locals() and len(knee_point_candidates) > 0:
-        ax.axvline(knee_point['TotalVehicles'], color='green', linestyle='--', linewidth=2, label='Knee Point')
-ax.set_xlabel('Total Vehicles', fontweight='bold')
-ax.set_ylabel('Service Time Improvement Rate (min/vehicle)', fontweight='bold')
-ax.set_title('Rate of Change: Service Time', fontsize=12, fontweight='bold')
+train_plot = train_analysis[(train_analysis['Train_Increment'] > 0) & (train_analysis['ServiceTime_RatePerTrain'] != 0)]
+if len(train_plot) > 0:
+    ax.plot(train_plot['Trains'], train_plot['ServiceTime_RatePerTrain'], 
+             'o-', linewidth=2, markersize=6, label='Service Time Rate per Train', color='blue', alpha=0.7)
+ax.set_xlabel('Number of Trains', fontweight='bold')
+ax.set_ylabel('Service Time Improvement Rate (min/train)', fontweight='bold')
+ax.set_title('Rate of Change: Service Time vs Increasing Trains (Bus Range: 150-300)', fontsize=12, fontweight='bold')
 ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '1_rate_of_change_service_time.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(plot_dir, '1_rate_of_change_service_time_vs_trains.png'), dpi=300, bbox_inches='tight')
 plt.close()
-print(f"Saved: {os.path.join(plot_dir, '1_rate_of_change_service_time.png')}")
+print(f"Saved: {os.path.join(plot_dir, '1_rate_of_change_service_time_vs_trains.png')}")
 
-# 2. Rate of Change: Completed Jobs
+# 2. Rate of Change: Service Time vs Increasing Buses (train range 20-40)
 fig, ax = plt.subplots(figsize=(10, 6))
-df_sorted_plot_jobs = df_sorted[(df_sorted['Vehicles_Increment'] > 0) & (df_sorted['Jobs_RatePerVehicle'] > 0)]
-if len(df_sorted_plot_jobs) > 0:
-    ax.plot(df_sorted_plot_jobs['TotalVehicles'], df_sorted_plot_jobs['Jobs_RatePerVehicle'], 
-             's-', linewidth=2, markersize=4, label='Jobs Rate', color='green', alpha=0.7)
-    ax.axhline(jobs_rate_threshold, color='r', linestyle='--', linewidth=2, label='Threshold')
-    if 'knee_point' in locals() and len(knee_point_candidates) > 0:
-        ax.axvline(knee_point['TotalVehicles'], color='green', linestyle='--', linewidth=2, label='Knee Point')
-ax.set_xlabel('Total Vehicles', fontweight='bold')
-ax.set_ylabel('Jobs Improvement Rate (jobs/vehicle)', fontweight='bold')
-ax.set_title('Rate of Change: Completed Jobs', fontsize=12, fontweight='bold')
+bus_plot_st = bus_analysis[(bus_analysis['Bus_Increment'] > 0) & (bus_analysis['ServiceTime_RatePerBus'] != 0)]
+if len(bus_plot_st) > 0:
+    ax.plot(bus_plot_st['Buses'], bus_plot_st['ServiceTime_RatePerBus'], 
+             's-', linewidth=2, markersize=4, label='Service Time Rate per Bus', color='green', alpha=0.7)
+ax.set_xlabel('Number of Buses', fontweight='bold')
+ax.set_ylabel('Service Time Improvement Rate (min/bus)', fontweight='bold')
+ax.set_title('Rate of Change: Service Time vs Increasing Buses (Train Range: 20-40)', fontsize=12, fontweight='bold')
 ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '2_rate_of_change_completed_jobs.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(plot_dir, '2_rate_of_change_service_time_vs_buses.png'), dpi=300, bbox_inches='tight')
 plt.close()
-print(f"Saved: {os.path.join(plot_dir, '2_rate_of_change_completed_jobs.png')}")
+print(f"Saved: {os.path.join(plot_dir, '2_rate_of_change_service_time_vs_buses.png')}")
 
-# 3. Service Time vs Total Vehicles
+# 3. Rate of Change: Completed Jobs vs Increasing Trains (bus range 150-300)
 fig, ax = plt.subplots(figsize=(10, 6))
-scatter1 = ax.scatter(df['TotalVehicles'], df['AvgServiceTime'], 
-            c=df['BusesPerTrain'], cmap='coolwarm', alpha=0.5, s=20, label='All Configs')
-scatter2 = ax.scatter(df_reasonable['TotalVehicles'], df_reasonable['AvgServiceTime'],
-            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5,
-            label='Reasonable Ratio', zorder=5)
-scatter3 = ax.scatter(final_recommendation['TotalVehicles'], final_recommendation['AvgServiceTime'],
-            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2,
-            label='Recommended', zorder=6)
-plt.colorbar(scatter1, ax=ax, label='Buses per Train')
-ax.set_xlabel('Total Vehicles', fontweight='bold')
-ax.set_ylabel('Average Service Time (min)', fontweight='bold')
-ax.set_title('Service Time vs Fleet Size', fontsize=12, fontweight='bold')
+train_plot_jobs = train_analysis[(train_analysis['Train_Increment'] > 0) & (train_analysis['Jobs_RatePerTrain'] != 0)]
+if len(train_plot_jobs) > 0:
+    ax.plot(train_plot_jobs['Trains'], train_plot_jobs['Jobs_RatePerTrain'], 
+             'o-', linewidth=2, markersize=6, label='Jobs Rate per Train', color='purple', alpha=0.7)
+ax.set_xlabel('Number of Trains', fontweight='bold')
+ax.set_ylabel('Jobs Improvement Rate (jobs/train)', fontweight='bold')
+ax.set_title('Rate of Change: Completed Jobs vs Increasing Trains (Bus Range: 150-300)', fontsize=12, fontweight='bold')
 ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '3_service_time_vs_fleet_size.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(plot_dir, '3_rate_of_change_jobs_vs_trains.png'), dpi=300, bbox_inches='tight')
 plt.close()
-print(f"Saved: {os.path.join(plot_dir, '3_service_time_vs_fleet_size.png')}")
+print(f"Saved: {os.path.join(plot_dir, '3_rate_of_change_jobs_vs_trains.png')}")
 
-# 4. Completed Jobs vs Total Vehicles
+# 4. Rate of Change: Completed Jobs vs Increasing Buses (train range 20-40)
 fig, ax = plt.subplots(figsize=(10, 6))
-scatter1 = ax.scatter(df['TotalVehicles'], df['CompletedJobs'], 
-            c=df['BusesPerTrain'], cmap='coolwarm', alpha=0.5, s=20)
-scatter2 = ax.scatter(df_reasonable['TotalVehicles'], df_reasonable['CompletedJobs'],
-            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5, zorder=5, label='Reasonable Ratio')
-scatter3 = ax.scatter(final_recommendation['TotalVehicles'], final_recommendation['CompletedJobs'],
-            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2, zorder=6, label='Recommended')
-plt.colorbar(scatter1, ax=ax, label='Buses per Train')
-ax.set_xlabel('Total Vehicles', fontweight='bold')
-ax.set_ylabel('Completed Jobs', fontweight='bold')
-ax.set_title('Throughput vs Fleet Size', fontsize=12, fontweight='bold')
+bus_plot_jobs = bus_analysis[(bus_analysis['Bus_Increment'] > 0) & (bus_analysis['Jobs_RatePerBus'] != 0)]
+if len(bus_plot_jobs) > 0:
+    ax.plot(bus_plot_jobs['Buses'], bus_plot_jobs['Jobs_RatePerBus'], 
+             's-', linewidth=2, markersize=4, label='Jobs Rate per Bus', color='orange', alpha=0.7)
+ax.set_xlabel('Number of Buses', fontweight='bold')
+ax.set_ylabel('Jobs Improvement Rate (jobs/bus)', fontweight='bold')
+ax.set_title('Rate of Change: Completed Jobs vs Increasing Buses (Train Range: 20-40)', fontsize=12, fontweight='bold')
 ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '4_throughput_vs_fleet_size.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(plot_dir, '4_rate_of_change_jobs_vs_buses.png'), dpi=300, bbox_inches='tight')
 plt.close()
-print(f"Saved: {os.path.join(plot_dir, '4_throughput_vs_fleet_size.png')}")
+print(f"Saved: {os.path.join(plot_dir, '4_rate_of_change_jobs_vs_buses.png')}")
 
 # 5. Buses per Train Heatmap
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -428,62 +332,96 @@ plt.savefig(os.path.join(plot_dir, '5_buses_per_train_heatmap.png'), dpi=300, bb
 plt.close()
 print(f"Saved: {os.path.join(plot_dir, '5_buses_per_train_heatmap.png')}")
 
-# 6. Composite Score Heatmap
-fig, ax = plt.subplots(figsize=(10, 6))
-heatmap_score = df_reasonable.pivot_table(index='Trains', columns='Buses', values='CompositeScore', aggfunc='mean')
-sns.heatmap(heatmap_score, cmap='viridis', annot=False, cbar_kws={'label': 'Composite Score'}, ax=ax)
-ax.axhline(int(final_recommendation['Trains']) - 0.5, color='yellow', linewidth=3, label='Recommended')
-ax.axvline(int(final_recommendation['Buses']) - 0.5, color='yellow', linewidth=3)
-ax.set_title('Composite Score Heatmap (Reasonable Ratios)', fontsize=12, fontweight='bold')
-ax.set_xlabel('Number of Buses', fontweight='bold')
-ax.set_ylabel('Number of Trains', fontweight='bold')
-ax.legend(fontsize=10)
-plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '6_composite_score_heatmap.png'), dpi=300, bbox_inches='tight')
-plt.close()
-print(f"Saved: {os.path.join(plot_dir, '6_composite_score_heatmap.png')}")
+# 6. Completed Jobs vs Number of Trains (showing plateau at 30 trains)
+print("\nGenerating plateau analysis visualizations...")
+train_stats = df_reasonable.groupby('Trains').agg({
+    'CompletedJobs': ['mean', 'median', 'std'],
+    'AvgServiceTime': ['mean', 'median']
+}).reset_index()
+train_stats.columns = ['Trains', 'Jobs_Mean', 'Jobs_Median', 'Jobs_Std', 'ServiceTime_Mean', 'ServiceTime_Median']
 
-# 7. Efficiency vs Total Vehicles
 fig, ax = plt.subplots(figsize=(10, 6))
-scatter1 = ax.scatter(df['TotalVehicles'], df['JobsPerVehicle'], 
-            c=df['AvgServiceTime'], cmap='viridis_r', alpha=0.5, s=20)
-scatter2 = ax.scatter(df_reasonable['TotalVehicles'], df_reasonable['JobsPerVehicle'],
-            c='green', s=30, marker='*', edgecolors='black', linewidths=0.5, zorder=5, label='Reasonable Ratio')
-scatter3 = ax.scatter(final_recommendation['TotalVehicles'], final_recommendation['JobsPerVehicle'],
-            c='yellow', s=400, marker='D', edgecolors='black', linewidths=2, zorder=6, label='Recommended')
-plt.colorbar(scatter1, ax=ax, label='Service Time (min)')
-ax.set_xlabel('Total Vehicles', fontweight='bold')
-ax.set_ylabel('Efficiency (Jobs per Vehicle)', fontweight='bold')
-ax.set_title('Efficiency vs Fleet Size', fontsize=12, fontweight='bold')
-ax.grid(True, alpha=0.3)
-ax.legend(fontsize=10)
-plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '7_efficiency_vs_fleet_size.png'), dpi=300, bbox_inches='tight')
-plt.close()
-print(f"Saved: {os.path.join(plot_dir, '7_efficiency_vs_fleet_size.png')}")
-
-# 8. Pareto Frontier
-fig, ax = plt.subplots(figsize=(10, 6))
-scatter1 = ax.scatter(df['AvgServiceTime'], df['CompletedJobs'], 
-            c=df['TotalVehicles'], cmap='coolwarm', alpha=0.4, s=20, label='All Configs')
-scatter2 = ax.scatter(df_reasonable['AvgServiceTime'], df_reasonable['CompletedJobs'],
-            c='green', s=40, marker='*', edgecolors='black', linewidths=0.5,
-            label='Reasonable Ratio', zorder=5)
-scatter3 = ax.scatter(final_recommendation['AvgServiceTime'], final_recommendation['CompletedJobs'],
-            c='yellow', s=500, marker='D', edgecolors='black', linewidths=2,
-            label='Recommended', zorder=6)
-plt.colorbar(scatter1, ax=ax, label='Total Vehicles')
-ax.set_xlabel('Average Service Time (min)', fontweight='bold')
+ax.plot(train_stats['Trains'], train_stats['Jobs_Mean'], 'o-', label='Mean Completed Jobs', 
+        linewidth=2, markersize=6, color='blue')
+ax.fill_between(train_stats['Trains'], 
+                train_stats['Jobs_Mean'] - train_stats['Jobs_Std'], 
+                train_stats['Jobs_Mean'] + train_stats['Jobs_Std'],
+                alpha=0.2, color='blue', label='±1 Std Dev')
+ax.axvline(30, color='red', linestyle='--', linewidth=2, label='Plateau Point (30 trains)')
+ax.fill_betweenx([0, max(train_stats['Jobs_Mean']) * 1.1], 30, max(train_stats['Trains']), 
+                 alpha=0.1, color='red', label='Plateau Region')
+ax.set_xlabel('Number of Trains', fontweight='bold')
 ax.set_ylabel('Completed Jobs', fontweight='bold')
-ax.set_title('Pareto Frontier', fontsize=12, fontweight='bold')
+ax.set_title('Completed Jobs vs Number of Trains (Plateau at 30 Trains)', fontsize=12, fontweight='bold')
 ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, '8_pareto_frontier.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(plot_dir, '6_jobs_vs_trains_plateau.png'), dpi=300, bbox_inches='tight')
 plt.close()
-print(f"Saved: {os.path.join(plot_dir, '8_pareto_frontier.png')}")
+print(f"Saved: {os.path.join(plot_dir, '6_jobs_vs_trains_plateau.png')}")
 
-# 9. Summary Statistics (as text file)
+# 7. Average Service Time vs Number of Trains (showing plateau at 55 trains)
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(train_stats['Trains'], train_stats['ServiceTime_Mean'], 's-', label='Mean Service Time', 
+        linewidth=2, markersize=6, color='green')
+ax.axvline(55, color='red', linestyle='--', linewidth=2, label='Service Time Plateau Point (55 trains)')
+ax.fill_betweenx([0, max(train_stats['ServiceTime_Mean']) * 1.1], 55, max(train_stats['Trains']), 
+                 alpha=0.1, color='red', label='Plateau Region')
+ax.set_xlabel('Number of Trains', fontweight='bold')
+ax.set_ylabel('Average Service Time (min)', fontweight='bold')
+ax.set_title('Average Service Time vs Number of Trains (Plateau at 55 Trains)', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '7_service_time_vs_trains_plateau.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '7_service_time_vs_trains_plateau.png')}")
+
+# 8. Completed Jobs vs Number of Buses (showing plateau at 180 buses)
+bus_stats = df_reasonable.groupby('Buses').agg({
+    'CompletedJobs': ['mean', 'median', 'std'],
+    'AvgServiceTime': ['mean', 'median']
+}).reset_index()
+bus_stats.columns = ['Buses', 'Jobs_Mean', 'Jobs_Median', 'Jobs_Std', 'ServiceTime_Mean', 'ServiceTime_Median']
+
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(bus_stats['Buses'], bus_stats['Jobs_Mean'], 'o-', label='Mean Completed Jobs', 
+        linewidth=2, markersize=4, color='purple')
+ax.fill_between(bus_stats['Buses'], 
+                bus_stats['Jobs_Mean'] - bus_stats['Jobs_Std'], 
+                bus_stats['Jobs_Mean'] + bus_stats['Jobs_Std'],
+                alpha=0.2, color='purple', label='±1 Std Dev')
+ax.axvline(180, color='red', linestyle='--', linewidth=2, label='Plateau Point (180 buses)')
+ax.fill_betweenx([0, max(bus_stats['Jobs_Mean']) * 1.1], 180, max(bus_stats['Buses']), 
+                 alpha=0.15, color='red', label='Plateau Region')
+ax.set_xlabel('Number of Buses', fontweight='bold')
+ax.set_ylabel('Completed Jobs', fontweight='bold')
+ax.set_title('Completed Jobs vs Number of Buses (Plateau at 180 Buses)', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '8_jobs_vs_buses_plateau.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '8_jobs_vs_buses_plateau.png')}")
+
+# 9. Average Service Time vs Number of Buses (showing plateau at 400 buses)
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(bus_stats['Buses'], bus_stats['ServiceTime_Mean'], 's-', label='Mean Service Time', 
+        linewidth=2, markersize=4, color='orange')
+ax.axvline(400, color='red', linestyle='--', linewidth=2, label='Plateau Point (400 buses)')
+ax.fill_betweenx([0, max(bus_stats['ServiceTime_Mean']) * 1.1], 400, max(bus_stats['Buses']), 
+                 alpha=0.15, color='red', label='Plateau Region')
+ax.set_xlabel('Number of Buses', fontweight='bold')
+ax.set_ylabel('Average Service Time (min)', fontweight='bold')
+ax.set_title('Average Service Time vs Number of Buses (Plateau at 400 Buses)', fontsize=12, fontweight='bold')
+ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+plt.tight_layout()
+plt.savefig(os.path.join(plot_dir, '9_service_time_vs_buses_plateau.png'), dpi=300, bbox_inches='tight')
+plt.close()
+print(f"Saved: {os.path.join(plot_dir, '9_service_time_vs_buses_plateau.png')}")
+
+# 10. Summary Statistics (as text file)
 summary_text = f"""
 ⭐ RECOMMENDED CONFIGURATION
 
@@ -495,35 +433,29 @@ Service Time: {final_recommendation['AvgServiceTime']:.2f} min
 Completed Jobs: {int(final_recommendation['CompletedJobs']):,}
 Service Level: {(final_recommendation['CompletedJobs']/total_workers*100) if total_workers > 0 else 0:.1f}% of workers
 Meets Minimum: {'✓ YES' if final_recommendation['CompletedJobs'] >= min_jobs_required else '✗ NO'}
-Total Vehicles: {int(final_recommendation['TotalVehicles'])}
 Efficiency: {final_recommendation['JobsPerVehicle']:.2f} jobs/vehicle
-
-Composite Score: {final_recommendation['CompositeScore']:.4f}
 
 Performance vs Best:
 • Service Time: {((final_recommendation['AvgServiceTime']/best_service_time - 1)*100):+.1f}%
 • Completed Jobs: {((1 - final_recommendation['CompletedJobs']/best_completed_jobs)*100):+.1f}%
-• Vehicle Savings: {int(best_service_config['TotalVehicles'] - final_recommendation['TotalVehicles'])} vs best service
 """
 
-with open(os.path.join(plot_dir, '9_summary_statistics.txt'), 'w') as f:
+with open(os.path.join(plot_dir, '10_summary_statistics.txt'), 'w') as f:
     f.write(summary_text)
-print(f"Saved: {os.path.join(plot_dir, '9_summary_statistics.txt')}")
+print(f"Saved: {os.path.join(plot_dir, '10_summary_statistics.txt')}")
 
 print(f"\nAll visualizations saved to '{plot_dir}/' directory")
 
 # Save summary
 summary_data = {
     'Metric': ['Recommended Trains', 'Recommended Buses', 'Buses per Train', 
-               'Service Time (min)', 'Completed Jobs', 'Total Vehicles', 
-               'Efficiency (jobs/vehicle)', 'Composite Score'],
+               'Service Time (min)', 'Completed Jobs', 
+               'Efficiency (jobs/vehicle)'],
     'Value': [int(final_recommendation['Trains']), int(final_recommendation['Buses']),
               f"{final_recommendation['BusesPerTrain']:.1f}",
               f"{final_recommendation['AvgServiceTime']:.2f}",
               int(final_recommendation['CompletedJobs']),
-              int(final_recommendation['TotalVehicles']),
-              f"{final_recommendation['JobsPerVehicle']:.2f}",
-              f"{final_recommendation['CompositeScore']:.4f}"]
+              f"{final_recommendation['JobsPerVehicle']:.2f}"]
 }
 
 summary_df = pd.DataFrame(summary_data)
@@ -546,6 +478,6 @@ if final_recommendation['CompletedJobs'] >= min_jobs_required:
     print(f"   ✓ Meets minimum service level requirement ({MIN_JOBS_PERCENTAGE*100:.0f}%)")
 else:
     print(f"   ⚠ Does NOT meet minimum service level requirement ({MIN_JOBS_PERCENTAGE*100:.0f}%)")
-print(f"   This configuration balances performance, efficiency, and cost while maintaining")
-print(f"   a reasonable train/bus ratio and avoiding diminishing returns.")
+print(f"   This is the minimum viable fleet configuration that meets all service level")
+print(f"   requirements while minimizing the number of trains and buses needed.")
 print("=" * 80)
