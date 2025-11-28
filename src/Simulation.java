@@ -207,7 +207,8 @@ public class Simulation {
                 }
                 
                 // Check if this train would exceed simulation time
-                double travelTime = t.stopAtStation(trainCurrentTime);
+                // Pass both train-specific time (for scheduling) and global simulation time (for job completion)
+                double travelTime = t.stopAtStation(trainCurrentTime, currentTime);
                 travelTimes.put(t, travelTime);
                 maxTravelTime = Math.max(travelTime, maxTravelTime);
                 

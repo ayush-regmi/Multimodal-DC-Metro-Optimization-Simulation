@@ -57,7 +57,7 @@ public class BatchServerQueue {
         return -1;
     }
 
-    public double stopAtStation(double currentTime) {
+    public double stopAtStation(double trainCurrentTime, double globalSimulationTime) {
         currentStation = stationQueue.dequeue();
 
         double stationDistanceFromOrigin = getCurrentStation().getDistanceFromOriginStation();
@@ -121,10 +121,27 @@ public class BatchServerQueue {
         for(int i = 0; i < passengerCount; i++) {
             Job j = currentPassengers.dequeue();
             if(getCurrentStation().getName().equals(j.getDestStation())) {
-                j.complete(currentTime);
+                // Use global simulation time for job completion to ensure consistent time reference
+                // This prevents negative service times when train time offsets differ from global time
+                double completionTime = Math.max(globalSimulationTime, trainCurrentTime);
+                // Ensure completion time is never less than creation time
+                completionTime = Math.max(completionTime, j.getTimeOfCreation());
+                
+                j.complete(completionTime);
                 completedJobs++;
                 passengersAlighting++;
                 double serviceTime = j.getServiceEndTime() - j.getTimeOfCreation();
+                
+                // Safety check: service time should never be negative
+                if (serviceTime < 0) {
+                    System.err.println("WARNING: Negative service time detected! " +
+                        "Creation: " + j.getTimeOfCreation() + 
+                        ", Completion: " + j.getServiceEndTime() + 
+                        ", Service Time: " + serviceTime);
+                    // Clamp to 0 to prevent negative values
+                    serviceTime = 0.0;
+                }
+                
                 totalServiceTime += serviceTime;
                 longestServiceTime = Math.max(longestServiceTime, serviceTime);
             } else {
@@ -147,8 +164,16 @@ public class BatchServerQueue {
         double dwellTimeInMinutes = totalDwellTime / 60.0;
         timeToTravel += dwellTimeInMinutes;
 
-        currentStation.getBusArrivals(currentTime, stationQueue.getStationNames());
+        // Use global simulation time for bus arrivals to ensure consistency
+        currentStation.getBusArrivals(globalSimulationTime, stationQueue.getStationNames());
         return timeToTravel;
+    }
+    
+    // Overloaded method for backward compatibility (uses train time as global time)
+    // This should not be used in new code - use the two-parameter version instead
+    @Deprecated
+    public double stopAtStation(double currentTime) {
+        return stopAtStation(currentTime, currentTime);
     }
 
     public String toString() { return "Stopping at " + currentStation.getName() + ". Number of passengers: " + passengerCount(); }
